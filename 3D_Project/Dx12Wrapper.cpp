@@ -193,7 +193,8 @@ HRESULT Dx12Wrapper::CreateRootSignature()
 	descRange[1].BaseShaderRegister = 1;//レジスタ番号
 	descRange[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	descRange[2].NumDescriptors = 1;
+	// テクスチャレンジ
+	descRange[2].NumDescriptors = 3;// テクスチャとスフィアの二つ
 	descRange[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;//てくすちゃ
 	descRange[2].BaseShaderRegister = 0;//レジスタ番号
 	descRange[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -314,7 +315,7 @@ HRESULT Dx12Wrapper::LoadPMD()
 {
 	FILE*fp;
 	PMDHeader data;
-	std::string ModelPath = "model/初音ミク.pmd";
+	std::string ModelPath = "model/初音ミクmetal.pmd";
 
 	fopen_s(&fp, ModelPath.c_str(),"rb");
 
@@ -354,18 +355,24 @@ HRESULT Dx12Wrapper::LoadPMD()
 	}
 
 	// しろてくすちゃつくる
-	auto result = CreateWhiteBuffer();
+	auto result = CreateWhiteTexture();
+	// くろてくすちゃつくる
+	result = CreateBlackTexture();
 
 	// テクスチャの読み込みとバッファの作成
 	_textureBuffer.resize(mnum);
+	_sphBuffer.resize(mnum);
+	_spaBuffer.resize(mnum);
+
 	for (int i = 0; i < _materials.size(); ++i) {
 		// テクスチャファイルパスの取得
 		std::string texFileName = _materials[i].texFileName;
+		
 		if (std::count(texFileName.begin(),texFileName.end(),'*')>0)
 		{
 			auto namepair = SplitFileName(texFileName);
 			if (GetExtension(namepair.first) == "sph"||
-				GetExtension(namepair.first)=="spa")
+				GetExtension(namepair.first) == "spa")
 			{
 				texFileName = namepair.second;
 			}
@@ -377,7 +384,18 @@ HRESULT Dx12Wrapper::LoadPMD()
 		auto texFilePath = GetTexPath(ModelPath, texFileName.c_str());
 
 		// テクスチャバッファを作成して入れる
-		_textureBuffer[i] = LoadTextureFromFile(texFilePath);
+		if (GetExtension(texFileName) == "sph")
+		{
+			_sphBuffer[i] = LoadTextureFromFile(texFilePath);
+		}
+		else if (GetExtension(texFileName) == "spa")
+		{
+			_spaBuffer[i] = LoadTextureFromFile(texFilePath);
+		}
+		else
+		{
+			_textureBuffer[i] = LoadTextureFromFile(texFilePath);
+		}
 	}
 
 	fclose(fp);
@@ -560,8 +578,8 @@ HRESULT Dx12Wrapper::CreateMaterialBuffer()
 	D3D12_DESCRIPTOR_HEAP_DESC matDescHeap = {};
 	matDescHeap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	matDescHeap.NodeMask = 0;
-	// 定数バッファとシェーダーリソースビューの二枚↓
-	matDescHeap.NumDescriptors = _materials.size()*2;
+	// 定数バッファとシェーダーリソースビューとSphとSpaの４枚↓
+	matDescHeap.NumDescriptors = _materials.size()*4;
 	matDescHeap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	auto result = _dev->CreateDescriptorHeap(&matDescHeap, IID_PPV_ARGS(&_matDescHeap));
@@ -614,6 +632,7 @@ HRESULT Dx12Wrapper::CreateMaterialBuffer()
 
 	auto matHandle = _matDescHeap->GetCPUDescriptorHandleForHeapStart();
 	auto addsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	
 
 	for (int i = 0;i< _materialsBuff.size();++i)
 	{
@@ -623,16 +642,46 @@ HRESULT Dx12Wrapper::CreateMaterialBuffer()
 		_dev->CreateConstantBufferView(&matDesc, matHandle);// 定数バッファビューの作成
 		matHandle.ptr += addsize;// ポインタの加算
 		
-		// シェーダリソースビューの作成
-		srvDesc.Format = _textureBuffer[i]->GetDesc().Format;// テクスチャのフォーマットの取得
-		_dev->CreateShaderResourceView(_textureBuffer[i], &srvDesc, matHandle);// シェーダーリソースビューの作成
+		// テクスチャ用シェーダリソースビューの作成
+		if (_textureBuffer[i] == nullptr) {
+			srvDesc.Format = whiteTex->GetDesc().Format;
+			_dev->CreateShaderResourceView(whiteTex, &srvDesc, matHandle);
+		}
+		else
+		{
+			srvDesc.Format = _textureBuffer[i]->GetDesc().Format;// テクスチャのフォーマットの取得
+			_dev->CreateShaderResourceView(_textureBuffer[i], &srvDesc, matHandle);// シェーダーリソースビューの作成
+		}
 		matHandle.ptr += addsize;// ポインタの加算
+
+		// 乗算スフィアマップSRVの作成
+		if (_sphBuffer[i] == nullptr) {
+			srvDesc.Format = whiteTex->GetDesc().Format;
+			_dev->CreateShaderResourceView(whiteTex, &srvDesc, matHandle);
+		}
+		else 
+		{
+			srvDesc.Format = _sphBuffer[i]->GetDesc().Format;
+			_dev->CreateShaderResourceView(_sphBuffer[i], &srvDesc, matHandle);
+		}
+		matHandle.ptr += addsize;
+
+		// 加算スフィアマップSRVの作成
+		if (_spaBuffer[i] == nullptr) {
+			srvDesc.Format = blackTex->GetDesc().Format;
+			_dev->CreateShaderResourceView(blackTex, &srvDesc, matHandle);
+		}
+		else 
+		{
+			srvDesc.Format = _spaBuffer[i]->GetDesc().Format;
+			_dev->CreateShaderResourceView(_spaBuffer[i], &srvDesc, matHandle);
+		}		matHandle.ptr += addsize;
 	}
 
 	return result;
 }
 
-HRESULT Dx12Wrapper::CreateWhiteBuffer()
+HRESULT Dx12Wrapper::CreateWhiteTexture()
 {
 	// 白バッファ用のデータ配列
 	std::vector<unsigned char> data(4 * 4 * 4);
@@ -666,10 +715,52 @@ HRESULT Dx12Wrapper::CreateWhiteBuffer()
 		&resDesc,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 		nullptr,
-		IID_PPV_ARGS(&whiteBuff)
+		IID_PPV_ARGS(&whiteTex)
 	);
 
-	result = whiteBuff->WriteToSubresource(0, nullptr, data.data(), 4 * 4, data.size());
+	result = whiteTex->WriteToSubresource(0, nullptr, data.data(), 4 * 4, data.size());
+
+	return result;
+}
+
+HRESULT Dx12Wrapper::CreateBlackTexture()
+{
+	// 黒バッファ用のデータ配列
+	std::vector<unsigned char> data(4 * 4 * 4);
+	std::fill(data.begin(), data.end(), 0);//全部0で埋める
+
+	// 転送する用のヒープ設定
+	D3D12_HEAP_PROPERTIES texHeapProp = {};
+	texHeapProp.Type = D3D12_HEAP_TYPE_CUSTOM;
+	texHeapProp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+	texHeapProp.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+	texHeapProp.CreationNodeMask = 0;
+	texHeapProp.VisibleNodeMask = 0;
+
+	// 転送する用のデスク設定
+	D3D12_RESOURCE_DESC resDesc = {};
+	resDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	resDesc.Width = 4;
+	resDesc.Height = 4;
+	resDesc.DepthOrArraySize = 1;
+	resDesc.SampleDesc.Count = 1;
+	resDesc.SampleDesc.Quality = 0;
+	resDesc.MipLevels = 1;
+	resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	resDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	resDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	// 黒テクスチャの作成
+	auto result = _dev->CreateCommittedResource(
+		&texHeapProp,
+		D3D12_HEAP_FLAG_NONE,//特に指定なし
+		&resDesc,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		nullptr,
+		IID_PPV_ARGS(&blackTex)
+	);
+
+	result = blackTex->WriteToSubresource(0, nullptr, data.data(), 4 * 4, data.size());
 
 	return result;
 }
@@ -732,7 +823,7 @@ ID3D12Resource * Dx12Wrapper::LoadTextureFromFile(std::string & texPath)
 		&metadata,
 		scratchImg);
 	if (FAILED(result)) {
-		return whiteBuff;// 失敗したら白テクスチャを入れる
+		return whiteTex;// 失敗したら白テクスチャを入れる
 	}
 
 	// イメージデータを搾取
@@ -892,7 +983,7 @@ int Dx12Wrapper::Init()
 void Dx12Wrapper::UpDate()
 {
 	// 回転するやつ
-	angle = 0.05f;
+	angle = 0.01f;
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
 
 	_wvp.wvp = _wvp.world;
@@ -997,7 +1088,7 @@ void Dx12Wrapper::UpDate()
 		_cmdList->DrawIndexedInstanced(m.indexNum, 1, offset, 0, 0);
 
 		// ポインタの加算
-		mathandle.ptr += incsize*2;
+		mathandle.ptr += incsize*4;// 4枚あるから4倍
 		
 		// 変数の加算
 		offset += m.indexNum;

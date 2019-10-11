@@ -1,7 +1,10 @@
+// テクスチャ
 Texture2D<float4> tex : register(t0);
 
+// サンプラ
 SamplerState smp : register(s0);
 
+// 行列(マトリックス)
 cbuffer mat : register(b0)
 {
     matrix world;
@@ -11,6 +14,7 @@ cbuffer mat : register(b0)
     matrix lvp;
 };
 
+// マテリアル
 cbuffer material : register(b1)
 {
     float4 diffuse;
@@ -18,13 +22,21 @@ cbuffer material : register(b1)
     float3 ambient;
 }
 
+// 乗算スフィアマップ
+Texture2D<float4> sph : register(t1); //1 番スロットに設定されたテクスチャ
+
+// 乗算スフィアマップ
+Texture2D<float4> spa : register(t2); //1 番スロットに設定されたテクスチャ
+
 
 struct Out
 {
 	float4 pos : POSITION;
     float4 svpos : SV_POSITION;
     float2 uv : TEXCOORD;
-    float3 normal : NORMAL;
+    float3 normal : NORMAL0;
+    float3 vnormal : NORMAL1;
+    float3 ray : VECTOR; //ベクトル
 };
 
 // 頂点シェーダ
@@ -37,40 +49,36 @@ Out vs( float3 pos : POSITION,
     o.svpos = mul(wvp, float4(pos, 1));
     o.uv = uv;
     o.normal = mul(world, float4(normal, 1));
+    o.vnormal = mul(view, float4(o.normal, 1));
+    o.ray = normalize(pos.xyz - projection); //視線ベクトル
 	return o;
 }
 
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
-{
-    float3 l = normalize(float3(1, -1, 1));
-    float b = dot(-l, o.normal);
-    return float4(b, b, b, 1) * diffuse * tex.Sample(smp, o.uv);
-
-    /*
+{    
     // 光源
-    float3 light = float3(-1, 1, -1);
+    float3 light = normalize(float3(1, -1, 1));
     light = normalize(light);
+    float3 lightColor = float3(1, 1, 1);
 
-    // 光の法線ベクトル
+    // 鏡面
     float3 mirror = reflect(light,o.normal);
-
-    // 光線
-    float3 ray = float3(0,0,0);
-
+    
     // 反射光
-    float spec = saturate(dot(reflect(light, o.normal),ray));
+    float spec = saturate(dot(reflect(light, o.normal),o.ray));
     spec = pow(spec, specular.a);
 
     // 影
     float brightness = saturate(dot(light, o.normal.xyz));
 
+    // 正規化UV
+    float2 normalUV = (o.normal.xy + float2(1, -1)) * float2(0.5, -0.5);
+
+    // スフィアマップのUV
+    float2 sphereMapUV = o.vnormal.xy;
+
     // 返り血
-    return float4(saturate(brightness + specular.xyz * spec + ambient.xyz), 1)                    * diffuse * tex.Sample(smp,o.uv);    */
-    /*　過去に使った返り血たち　*/
-    //return float4(ambient, 1);
-    //return float4(1, 1, 1, 1);
-    //return float4(britness, britness, britness, 1);
-    //return float4(diffuse, 1);
-    //return float4(brightness, brightness, brightness, 1) * diffuse;
+    return float4(saturate(brightness + specular.xyz * spec + ambient.xyz), 1)
+                    * diffuse * tex.Sample(smp, o.uv) * sph.Sample(smp, sphereMapUV) + spa.Sample(smp, sphereMapUV);
 }

@@ -94,7 +94,12 @@ private:
 	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
 	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
 	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ
-	ID3D12Resource* whiteBuff = nullptr;
+	std::vector<ID3D12Resource*> _sphBuffer;// 乗算スフィアマップ
+	std::vector<ID3D12Resource*> _spaBuffer;// 加算スフィアマップ
+
+	// 白黒テクスチャ
+	ID3D12Resource* whiteTex = nullptr;
+	ID3D12Resource* blackTex = nullptr;
 
 	ID3DBlob* vertexShader = nullptr;
 	ID3DBlob* pixelShader = nullptr;
@@ -139,8 +144,13 @@ private:
 	// マテリアルバッファとマテリアルバッファビューを作る関数
 	HRESULT CreateMaterialBuffer();
 
-	// 定数バッファの作成
-	HRESULT CreateWhiteBuffer();
+	// 白テクスチャの作成
+	HRESULT CreateWhiteTexture();
+
+	// 白テクスチャの作成
+	HRESULT CreateBlackTexture();
+
+
 	// ---その他関数--- //
 
 	// シェーダーのよみこみを行う関数
