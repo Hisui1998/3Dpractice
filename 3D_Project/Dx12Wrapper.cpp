@@ -363,6 +363,7 @@ HRESULT Dx12Wrapper::LoadPMD()
 	_textureBuffer.resize(mnum);
 	_sphBuffer.resize(mnum);
 	_spaBuffer.resize(mnum);
+	_toonResources.resize(mnum);
 
 	for (int i = 0; i < _materials.size(); ++i) {
 		// テクスチャファイルパスの取得
@@ -636,6 +637,13 @@ HRESULT Dx12Wrapper::CreateMaterialBuffer()
 
 	for (int i = 0;i< _materialsBuff.size();++i)
 	{
+		//トゥーンリソースの読み込み
+		std::string toonFilePath = "toon/";
+		char toonFileName[16];
+		sprintf_s(toonFileName, "toon%02d.bmp", _materials[i].toon_index + 1);
+		toonFilePath += toonFileName;
+		_toonResources[i] = LoadTextureFromFile(toonFilePath);
+
 		// 定数バッファの作成
 		matDesc.BufferLocation = _materialsBuff[i]->GetGPUVirtualAddress();
 		matDesc.SizeInBytes = size;

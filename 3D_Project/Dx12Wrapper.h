@@ -89,7 +89,7 @@ private:
 
 	std::vector<ID3D12Resource*>renderTargets;
 
-	std::vector<ID3D12Resource*>_toonResource;
+	std::vector<ID3D12Resource*>_toonResources;
 
 	std::map<std::string,ID3D12Resource*>_resourceTable;
 
