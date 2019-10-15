@@ -817,6 +817,13 @@ ID3D12Resource * Dx12Wrapper::LoadTextureFromFile(std::string & texPath)
 	DirectX::TexMetadata metadata = {};
 	DirectX::ScratchImage scratchImg = {};
 
+	auto it = _resourceTable.find(texPath);
+	if (it != _resourceTable.end()) {
+		//テーブルに内にあったらロードするのではなくマップ内の
+		//リソースを返す
+		return (*it).second;
+	}
+
 	// テクスチャファイルのロード
 	auto result = LoadFromWICFile(GetWstringFromString(texPath).c_str(),
 		DirectX::WIC_FLAGS_NONE,
@@ -866,7 +873,7 @@ ID3D12Resource * Dx12Wrapper::LoadTextureFromFile(std::string & texPath)
 		img->rowPitch,
 		img->slicePitch
 	);
-
+	_resourceTable[texPath] = texbuff;
 	return texbuff;
 }
 

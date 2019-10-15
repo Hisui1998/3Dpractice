@@ -36,7 +36,6 @@ struct Out
     float2 uv : TEXCOORD;
     float3 normal : NORMAL0;
     float3 vnormal : NORMAL1;
-    float3 ray : VECTOR; //ベクトル
 };
 
 // 頂点シェーダ
@@ -50,7 +49,6 @@ Out vs( float3 pos : POSITION,
     o.uv = uv;
     o.normal = mul(world, float4(normal, 1));
     o.vnormal = mul(view, float4(o.normal, 1));
-    o.ray = normalize(pos.xyz - projection); //視線ベクトル
 	return o;
 }
 
@@ -66,7 +64,7 @@ float4 ps(Out o):SV_TARGET
     float3 mirror = reflect(light,o.normal);
     
     // 反射光
-    float spec = saturate(dot(reflect(light, o.normal),o.ray));
+    float spec = saturate(dot(reflect(light, o.normal), float3(0,0,0)));
     spec = pow(spec, specular.a);
 
     // 影

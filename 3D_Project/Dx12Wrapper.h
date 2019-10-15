@@ -4,6 +4,7 @@
 #include <d3dx12.h>
 #include <dxgi1_6.h>
 #include <vector>
+#include <map>
 #include <DirectXMath.h>
 
 // PMDファイルのヘッダ情報の構造体
@@ -87,6 +88,10 @@ private:
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
 
 	std::vector<ID3D12Resource*>renderTargets;
+
+	std::vector<ID3D12Resource*>_toonResource;
+
+	std::map<std::string,ID3D12Resource*>_resourceTable;
 
 	ID3D12Resource* _vertexBuffer = nullptr;// 頂点バッファ
 	ID3D12Resource* _indexBuffer = nullptr;// インデックスバッファ
