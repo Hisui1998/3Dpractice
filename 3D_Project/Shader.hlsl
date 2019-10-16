@@ -4,6 +4,8 @@ Texture2D<float4> tex : register(t0);
 // サンプラ
 SamplerState smp : register(s0);
 
+SamplerState smpToon : register(s1); //1 番スロットに設定されたサンプラ(トゥーン用) 
+
 // 行列(マトリックス)
 cbuffer mat : register(b0)
 {
@@ -22,13 +24,20 @@ cbuffer material : register(b1)
     float3 ambient;
 }
 
+///ボーン行列
+cbuffer bones : register(b2)
+{
+    matrix boneMats[512];
+}
+
 // 乗算スフィアマップ
 Texture2D<float4> sph : register(t1); //1 番スロットに設定されたテクスチャ
 
 // 乗算スフィアマップ
-Texture2D<float4> spa : register(t2); //1 番スロットに設定されたテクスチャ
+Texture2D<float4> spa : register(t2); //2 番スロットに設定されたテクスチャ
 
-
+// トゥーン
+Texture2D<float4> toon : register(t3); //3 番スロットに設定されたテクスチャ(トゥーン)
 struct Out
 {
 	float4 pos : POSITION;
@@ -36,47 +45,57 @@ struct Out
     float2 uv : TEXCOORD;
     float3 normal : NORMAL0;
     float3 vnormal : NORMAL1;
+    min16uint2 boneno : BONENO;
+    min16uint weight : WEIGHT;
 };
 
 // 頂点シェーダ
 Out vs( float3 pos : POSITION,
         float2 uv  : TEXCOORD,
-        float3 normal : NORMAL)
+        float3 normal : NORMAL,
+        min16uint2 boneno : BONENO,
+        min16uint weight : WEIGHT)
 {
-	Out o;
+    Out o;
+    float w = weight / 100.f;
+    matrix m = boneMats[boneno.x] * w + boneMats[boneno.y] * (1 - w);
+    pos = mul(m, float4(pos,1));
+
     o.pos = mul(world, float4(pos, 1));
     o.svpos = mul(wvp, float4(pos, 1));
     o.uv = uv;
     o.normal = mul(world, float4(normal, 1));
     o.vnormal = mul(view, float4(o.normal, 1));
+    o.boneno = boneno;
+    o.weight = weight;
+
+    
+
 	return o;
 }
 
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
-{    
-    // 光源
-    float3 light = normalize(float3(1, -1, 1));
-    light = normalize(light);
-    float3 lightColor = float3(1, 1, 1);
+{
+    float3 light = normalize(float3(1, -1, 1)); //光の向かうベクトル(平行光線)
+    float3 lightColor = float3(1, 1, 1); //ライトのカラー(1,1,1で真っ白)
 
-    // 鏡面
-    float3 mirror = reflect(light,o.normal);
-    
-    // 反射光
-    float spec = saturate(dot(reflect(light, o.normal), float3(0,0,0)));
-    spec = pow(spec, specular.a);
+    //ディフューズ計算
+    float diffuseB = saturate(dot(-light, o.normal));
+    float4 toonDif = toon.Sample(smpToon, float2(0, 1.0 - diffuseB));
 
-    // 影
-    float brightness = saturate(dot(light, o.normal.xyz));
+    //光の反射ベクトル
+    float3 refLight = normalize(reflect(light, o.normal.xyz));
+    float specularB = pow(saturate(dot(refLight, float3(0,0,0))), specular.a);
 
-    // 正規化UV
-    float2 normalUV = (o.normal.xy + float2(1, -1)) * float2(0.5, -0.5);
-
-    // スフィアマップのUV
+    //スフィアマップ用UV
     float2 sphereMapUV = o.vnormal.xy;
+    sphereMapUV = (sphereMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
-    // 返り血
-    return float4(saturate(brightness + specular.xyz * spec + ambient.xyz), 1)
-                    * diffuse * tex.Sample(smp, o.uv) * sph.Sample(smp, sphereMapUV) + spa.Sample(smp, sphereMapUV);
+    float4 texColor = tex.Sample(smp, o.uv); //テクスチャカラー
+
+    return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
+            + spa.Sample(smp, sphereMapUV) * texColor 
+            + float4(specularB * specular.rgb, 1) 
+            + float4(texColor.xyz * ambient * 0.5, 1); 
 }
