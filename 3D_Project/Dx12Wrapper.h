@@ -1,74 +1,13 @@
 #pragma once
 #include <windows.h>
-#include <d3d12.h>
 #include <d3dx12.h>
+#include <d3d12.h>
 #include <dxgi1_6.h>
+#include <DirectXMath.h>
 #include <vector>
 #include <map>
-#include <DirectXMath.h>
 
-// PMDファイルのヘッダ情報の構造体
-struct PMDHeader {
-	char signature[3];//pmd
-	float version;// 00 00 80 3f==1.00
-	char model_name[20];
-	char comment[256];
-};
-
-/// パディングを１バイト単位にするやつ
-#pragma pack (1)
-// 頂点情報構造体
-struct VertexInfo
-{
-	float pos[3];//12
-	float normal_vec[3];//12
-	float uv[2];//8
-	unsigned short bone_num[2];//4
-	unsigned char bone_weight;//1
-	unsigned char edge_flag;//1
-};
-
-// PMDファイルのマテリアル構造体
-struct PMDMaterial {
-	DirectX::XMFLOAT3 diffuse_color;// 12
-	float alpha;// 4
-	float specularity;// 4
-	DirectX::XMFLOAT3 specular_color;// 12
-	DirectX::XMFLOAT3 mirror_color;// 12
-	unsigned char toon_index;// 1
-	unsigned char edge_flag;// 1
-	// ここで２バイトあまる
-	unsigned int indexNum;// 4
-	char texFileName[20];//20
-};
-
-// PMDモデルのボーン情報構造体
-struct PMDBoneInfo {
-	char bone_name[20];// ボーン名:20
-	unsigned short parent_bone_index;// 親のボーン番号(ないときは0xffff):2
-	unsigned short tail_pos_bone_index;// よくわからんけど多分末尾かどうかみたいな：2
-	char bone_type; // ボーンの種類:1
-	unsigned short ik_parent_bone_index; // IKボーン番号(影響IKボーン。ない場合は0):2
-	DirectX::XMFLOAT3 bone_head_pos; // ボーンのヘッドの座標:12
-};
-#pragma pack()
-/// パディングを元に戻す()４バイト
-
-// ボーンのノード情報
-struct BoneNode {
-	int boneIdx;// ボーンの行列配列と対応
-	DirectX::XMFLOAT3 startPos;// ボーン始点
-	DirectX::XMFLOAT3 endPos;// ボーン終点
-	std::vector<BoneNode*>children;// 子供たちへのリンク
-};
-
-// 色情報の構造体
-struct PMDColor
-{
-	DirectX::XMFLOAT4 diffuse;
-	DirectX::XMFLOAT4 specular;
-	DirectX::XMFLOAT3 ambient;
-};
+class PMDmodel;
 
 // 行列の構造体
 struct WVPMatrix {
@@ -103,30 +42,13 @@ private:
 	ID3D12DescriptorHeap* _depthSrvHeap;// 深度シェーダーリソースビューヒープ
 	ID3D12DescriptorHeap* _srvDescHeap;// その他(テクスチャ、定数)デスクリプタヒープ
 	ID3D12DescriptorHeap* _rgstDescHeap;
-	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
-	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
 
 	std::vector<ID3D12Resource*>renderTargets;
-
-	std::vector<ID3D12Resource*>_toonResources;
-
-	std::map<std::string,ID3D12Resource*>_resourceTable;
 
 	ID3D12Resource* _vertexBuffer = nullptr;// 頂点バッファ
 	ID3D12Resource* _indexBuffer = nullptr;// インデックスバッファ
 	ID3D12Resource* _constBuff = nullptr;// 定数バッファ
 	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
-	ID3D12Resource* _boneBuffer;// ボーンバッファ
-	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
-	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ
-	std::vector<ID3D12Resource*> _sphBuffer;// 乗算スフィアマップ
-	std::vector<ID3D12Resource*> _spaBuffer;// 加算スフィアマップ
-
-	// 白黒テクスチャ
-	ID3D12Resource* whiteTex = nullptr;
-	ID3D12Resource* blackTex = nullptr;
-
-	ID3D12Resource* gradTex = nullptr;
 
 	ID3DBlob* vertexShader = nullptr;
 	ID3DBlob* pixelShader = nullptr;
@@ -137,12 +59,9 @@ private:
 
 	ID3D12PipelineState* _pipelineState = nullptr;
 
-	//  ---関数---  //
-	/// Init系(?)
-
+	/*　作成と初期化系関数　*/
 	// デバイスの初期化
 	HRESULT DeviceInit();
-	/// Create系(?)
 
 	// スワップチェインとコマンドキューの作成
 	HRESULT CreateSwapChainAndCmdQue();
@@ -168,53 +87,10 @@ private:
 	// 定数バッファの作成
 	HRESULT CreateConstantBuffer();
 
-	// マテリアルバッファとマテリアルバッファビューを作る関数
-	HRESULT CreateMaterialBuffer();
-
-	// ボーンバッファの作成
-	HRESULT CreateBoneBuffer();
-
-	// 白テクスチャの作成
-	HRESULT CreateWhiteTexture();
-
-	// 黒テクスチャの作成
-	HRESULT CreateBlackTexture();
-
-	// トゥーンのためのグラデーションテクスチャの作成
-	HRESULT	CreateGrayGradationTexture();
-
 	// ---その他関数--- //
-
 	// シェーダーのよみこみを行う関数
 	HRESULT LoadShader();
-			
-	// モデルデータの読み込みを行う関数
-	HRESULT LoadPMD();
-
-	// ボーンツリー作成
-	void CreateBoneTree();
-
-	// 子のノードまで再帰的に行列乗算する関数
-	void RecursiveMatrixMultiply(BoneNode& node,DirectX::XMMATRIX& MultiMat);
-
-	// 並行移動して回転
-	void RotationMatrix(std::string bonename,float theta);
-
-	// テクスチャのパスを作り出す関数
-	std::string GetTexPath(const std::string& modelPath, const char* texPath);
 	
-	// マルチバイト文字列からワイド文字列への変換を行う関数
-	std::wstring GetWstringFromString(const std::string& str);
-
-	// ファイルを読み込んでテクスチャバッファを作成する関数
-	ID3D12Resource*	LoadTextureFromFile(std::string& texPath);
-
-	// 拡張子を取得する関数
-	std::string GetExtension(const std::string& path);
-
-	// パスを分割する関数
-	std::pair<std::string, std::string>SplitFileName(const std::string&path,const char splitter='*');
-
 	// バッファに画を書き終わるまでウェイトをかける関数
 	void WaitWithFence();
 
@@ -225,20 +101,9 @@ private:
 	
 	WVPMatrix* _wvpMP;
 	WVPMatrix _wvp;
-
-	std::vector<VertexInfo> _vivec;
-	std::vector<unsigned short> verindex;
-	std::vector<PMDMaterial> _materials;
-
-	// ボーン関係の変数
-	std::vector<PMDBoneInfo> _bones;
-	std::vector<DirectX::XMMATRIX>_boneMats;
-	std::map<std::string, BoneNode>_boneMap;
-	DirectX::XMMATRIX* _mappedBones;
-
-	PMDColor* MapColor = nullptr;
-
 	float angle;// 角度
+
+	std::shared_ptr<PMDmodel> model;
 public:
 	Dx12Wrapper(HWND hwnd);
 	~Dx12Wrapper();
