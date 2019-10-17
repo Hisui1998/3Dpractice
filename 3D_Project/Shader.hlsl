@@ -66,10 +66,6 @@ Out vs( float3 pos : POSITION,
     o.uv = uv;
     o.normal = mul(world, float4(normal, 1));
     o.vnormal = mul(view, float4(o.normal, 1));
-    o.boneno = boneno;
-    o.weight = weight;
-
-    
 
 	return o;
 }

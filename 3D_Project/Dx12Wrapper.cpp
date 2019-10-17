@@ -205,7 +205,7 @@ HRESULT Dx12Wrapper::CreateRootSignature()
 	descRange[2].BaseShaderRegister = 0;//レジスタ番号
 	descRange[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	// ぼ-n
+	// ボーン
 	descRange[3].NumDescriptors = 1;
 	descRange[3].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
 	descRange[3].BaseShaderRegister = 2;
@@ -218,11 +218,13 @@ HRESULT Dx12Wrapper::CreateRootSignature()
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
+	// テクスチャ
 	rootParam[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[1].DescriptorTable.pDescriptorRanges = &descRange[1];//対応するレンジへのポインタ
 	rootParam[1].DescriptorTable.NumDescriptorRanges = 2;
 	rootParam[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//ピクセルシェーダから参照
 
+	// ボーン
 	rootParam[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[2].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[2].DescriptorTable.pDescriptorRanges = &descRange[3];
@@ -475,6 +477,25 @@ void Dx12Wrapper::CreateBoneTree()
 	}
 }
 
+void Dx12Wrapper::RecursiveMatrixMultiply(BoneNode& node, DirectX::XMMATRIX& MultiMat)
+{
+	// 行列を乗算する
+	_boneMats[node.boneIdx] *= MultiMat;
+
+	// 再帰する
+	for (auto& child : node.children) {
+		RecursiveMatrixMultiply(*child, _boneMats[node.boneIdx]);
+	}
+}
+
+void Dx12Wrapper::RotationMatrix(std::string bonename, float theta)
+{
+	auto elbow = _boneMap[bonename];
+	auto vec = XMLoadFloat3(&elbow.startPos);
+	_boneMats[elbow.boneIdx] =
+		DirectX::XMMatrixTranslationFromVector(DirectX::XMVectorScale(vec, -1))*		DirectX::XMMatrixRotationZ(theta)*		DirectX::XMMatrixTranslationFromVector(vec);
+}
+
 HRESULT Dx12Wrapper::CreateBuffersForIndexAndVertex()
 {
 	// ヒープの情報設定
@@ -714,7 +735,6 @@ HRESULT Dx12Wrapper::CreateMaterialBuffer()
 		toonFilePath += toonFileName;
 		_toonResources[i] = LoadTextureFromFile(toonFilePath);
 
-
 		// 定数バッファの作成
 		matDesc.BufferLocation = _materialsBuff[i]->GetGPUVirtualAddress();
 		matDesc.SizeInBytes = size;
@@ -754,7 +774,8 @@ HRESULT Dx12Wrapper::CreateMaterialBuffer()
 		{
 			srvDesc.Format = _spaBuffer[i]->GetDesc().Format;
 			_dev->CreateShaderResourceView(_spaBuffer[i], &srvDesc, matHandle);
-		}		matHandle.ptr += addsize;
+		}
+		matHandle.ptr += addsize;
 
 		// トゥーンのSRVの作成
 		if (_toonResources[i] == nullptr) {
@@ -1146,6 +1167,15 @@ int Dx12Wrapper::Init()
 // 毎フレーム呼び出す更新処理
 void Dx12Wrapper::UpDate()
 {
+	// 実験
+	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
+	RotationMatrix("右ひじ", DirectX::XM_PIDIV2);	RotationMatrix("左ひじ", -DirectX::XM_PIDIV2);
+	
+	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
+	RecursiveMatrixMultiply(_boneMap["センター"], rootmat);
+
+	std::copy(_boneMats.begin(), _boneMats.end(), _mappedBones);
+
 	// 回転するやつ
 	angle = 0.01f;
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
@@ -1155,12 +1185,6 @@ void Dx12Wrapper::UpDate()
 	_wvp.wvp *= _wvp.projection;
 	*_wvpMP = _wvp;
 
-	// 実験
-	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
-
-	_boneMats[_boneMap["左ひじ"].boneIdx] = DirectX::XMMatrixRotationZ(DirectX::XM_PIDIV4);
-
-	std::copy(std::begin(_boneMats), std::end(_boneMats), _mappedBones);
 
 
 	auto heapStart = _swcDescHeap->GetCPUDescriptorHandleForHeapStart();
@@ -1186,7 +1210,6 @@ void Dx12Wrapper::UpDate()
 	auto bbIndex = _swapchain->GetCurrentBackBufferIndex();
 	int DescriptorSize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	heapStart.ptr += bbIndex * DescriptorSize;
-	//clearColor[0] = (bbIndex != 0 ? 0 : 1);
 
 	// バリアの作成------------//
 	D3D12_RESOURCE_BARRIER BarrierDesc = {};
@@ -1244,12 +1267,22 @@ void Dx12Wrapper::UpDate()
 
 	// でスクリプターハンドルをどのくらい加算するか
 	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	
+
+	// ハンドルの取得
+	auto bohandle = _boneHeap->GetGPUDescriptorHandleForHeapStart();
+
+	// デスクリプタヒープのセット
+	_cmdList->SetDescriptorHeaps(1, &_boneHeap);
+
+	// デスクリプタテーブルのセット
+	_cmdList->SetGraphicsRootDescriptorTable(2, bohandle);
+
 	// ハンドルの取得
 	auto mathandle = _matDescHeap->GetGPUDescriptorHandleForHeapStart();
 
 	// デスクリプタヒープのセット
 	_cmdList->SetDescriptorHeaps(1, &_matDescHeap);
+
 
 	// 描画ループ
 	for (auto& m : _materials) {

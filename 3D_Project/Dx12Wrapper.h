@@ -104,6 +104,7 @@ private:
 	ID3D12DescriptorHeap* _srvDescHeap;// その他(テクスチャ、定数)デスクリプタヒープ
 	ID3D12DescriptorHeap* _rgstDescHeap;
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
+	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
 
 	std::vector<ID3D12Resource*>renderTargets;
 
@@ -115,6 +116,7 @@ private:
 	ID3D12Resource* _indexBuffer = nullptr;// インデックスバッファ
 	ID3D12Resource* _constBuff = nullptr;// 定数バッファ
 	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
+	ID3D12Resource* _boneBuffer;// ボーンバッファ
 	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
 	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ
 	std::vector<ID3D12Resource*> _sphBuffer;// 乗算スフィアマップ
@@ -192,6 +194,12 @@ private:
 	// ボーンツリー作成
 	void CreateBoneTree();
 
+	// 子のノードまで再帰的に行列乗算する関数
+	void RecursiveMatrixMultiply(BoneNode& node,DirectX::XMMATRIX& MultiMat);
+
+	// 並行移動して回転
+	void RotationMatrix(std::string bonename,float theta);
+
 	// テクスチャのパスを作り出す関数
 	std::string GetTexPath(const std::string& modelPath, const char* texPath);
 	
@@ -227,8 +235,6 @@ private:
 	std::vector<DirectX::XMMATRIX>_boneMats;
 	std::map<std::string, BoneNode>_boneMap;
 	DirectX::XMMATRIX* _mappedBones;
-	ID3D12Resource* _boneBuffer;
-	ID3D12DescriptorHeap* _boneHeap;
 
 	PMDColor* MapColor = nullptr;
 
