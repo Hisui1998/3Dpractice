@@ -126,12 +126,14 @@
     <ClCompile Include="Dx12Wrapper.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="PMDmodel.cpp" />
+    <ClCompile Include="PMXmodel.cpp" />
     <ClCompile Include="VMDMotion.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application.h" />
     <ClInclude Include="Dx12Wrapper.h" />
     <ClInclude Include="PMDmodel.h" />
+    <ClInclude Include="PMXmodel.h" />
     <ClInclude Include="VMDMotion.h" />
   </ItemGroup>
   <ItemGroup>

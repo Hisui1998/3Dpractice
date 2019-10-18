@@ -13,7 +13,7 @@ struct PMDHeader {
 /// パディングを１バイト単位にするやつ
 #pragma pack (1)
 // 頂点情報構造体
-struct VertexInfo
+struct PMDVertexInfo
 {
 	float pos[3];//12
 	float normal_vec[3];//12
@@ -122,7 +122,7 @@ private:
 	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
 
-	std::vector<VertexInfo> _vivec;// 頂点情報を格納している配列
+	std::vector<PMDVertexInfo> _vivec;// 頂点情報を格納している配列
 	std::vector<unsigned short> _verindex;// 頂点番号が格納されている配列
 	std::vector<PMDMaterial> _materials;// マテリアル
 
@@ -148,7 +148,7 @@ public:
 	void UpDate();
 	std::vector<PMDMaterial> GetMaterials();
 	std::vector<unsigned short> GetVertexIndex();
-	std::vector<VertexInfo> GetVertexInfo();
+	std::vector<PMDVertexInfo> GetVertexInfo();
 
 	ID3D12DescriptorHeap*& GetBoneHeap();
 	ID3D12DescriptorHeap*& GetMaterialHeap();

@@ -5,6 +5,7 @@
 #include <DirectXMath.h>
 #include <DirectXTex.h>
 #include "PMDmodel.h"
+#include "PMXmodel.h"
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
@@ -30,7 +31,8 @@ HRESULT Dx12Wrapper::DeviceInit()
 		// 成功しているかのチェック
 		if (SUCCEEDED(result)) {
 			level = lv;
-			model = std::make_shared<PMDmodel>(_dev, "model/初音ミクmetal.pmd");
+			pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミクmetal.pmd");
+			pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア標準ボーン.pmx");
 			break;
 		}
 	}
@@ -357,8 +359,8 @@ HRESULT Dx12Wrapper::CreateBuffersForIndexAndVertex()
 	heapprop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
 	heapprop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
-	auto vertexinfo = model->GetVertexInfo();
-	auto vertexindex = model->GetVertexIndex();
+	auto vertexinfo = pmxModel->GetVertexInfo();
+	auto vertexindex = pmxModel->GetVertexIndex();
 
 	// create
 	auto result = _dev->CreateCommittedResource(
@@ -378,15 +380,15 @@ HRESULT Dx12Wrapper::CreateBuffersForIndexAndVertex()
 		IID_PPV_ARGS(&_indexBuffer));
 	
 	// 頂点バッファのマッピング
-	VertexInfo* vertMap = nullptr;
+	PMXVertexInfo* vertMap = nullptr;
 	result = _vertexBuffer->Map(0, nullptr, (void**)&vertMap);
 	std::copy(vertexinfo.begin(), vertexinfo.end(), vertMap);
 
 	_vertexBuffer->Unmap(0, nullptr);
 
 	_vbView.BufferLocation = _vertexBuffer->GetGPUVirtualAddress();
-	_vbView.StrideInBytes = sizeof(VertexInfo);
-	_vbView.SizeInBytes = model->GetVertexInfo().size()* sizeof(VertexInfo);
+	_vbView.StrideInBytes = sizeof(PMXVertexInfo);
+	_vbView.SizeInBytes = pmxModel->GetVertexInfo().size()* sizeof(PMXVertexInfo);
 
 	// インデックスバッファのマッピング
 	unsigned short* idxMap = nullptr;
@@ -604,7 +606,7 @@ int Dx12Wrapper::Init()
 // 毎フレーム呼び出す更新処理
 void Dx12Wrapper::UpDate()
 {
-	model->UpDate();
+	pmxModel->UpDate();
 
 	// 回転するやつ
 	angle = 0.01f;
@@ -694,8 +696,8 @@ void Dx12Wrapper::UpDate()
 	// モデルのマテリアル適用
 	// どのインデックスから始めるかを入れておく変数
 	unsigned int offset = 0;
-	auto boneheap = model->GetBoneHeap();
-	auto materialheap = model->GetMaterialHeap();
+	auto boneheap = pmxModel->GetBoneHeap();
+	auto materialheap = pmxModel->GetMaterialHeap();
 
 	// デスクリプターハンドル一枚のサイズ取得
 	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -722,18 +724,18 @@ void Dx12Wrapper::UpDate()
 
 
 	// 描画ループ
-	for (auto& m : model->GetMaterials()) {
+	for (auto& m : pmxModel->GetMaterials()) {
 		// デスクリプタテーブルのセット
 		_cmdList->SetGraphicsRootDescriptorTable(1, mathandle);
 
 		// 描画部
-		_cmdList->DrawIndexedInstanced(m.indexNum, 1, offset, 0, 0);
+		_cmdList->DrawIndexedInstanced(m.faceVerCnt, 1, offset, 0, 0);
 
 		// ポインタの加算
 		mathandle.ptr += incsize*5;// 5枚あるから5倍
 		
 		// 変数の加算
-		offset += m.indexNum;
+		offset += m.faceVerCnt;
 	}
 
 	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;

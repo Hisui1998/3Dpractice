@@ -1,3 +1,4 @@
+#pragma once
 #include "PMDmodel.h"
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -23,7 +24,8 @@ PMDmodel::~PMDmodel()
 
 void PMDmodel::UpDate()
 {
-	angle+=10*DirectX::XM_PI/180;
+	angle = DirectX::XM_PIDIV4;
+	//angle+=10*DirectX::XM_PI/180;
 	// 実験
 	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 	RotationMatrix("右肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("右ひじ", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("左肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("左ひじ", DirectX::XMFLOAT3(angle, 0, 0));
@@ -67,7 +69,7 @@ std::vector<unsigned short> PMDmodel::GetVertexIndex()
 	return _verindex;
 }
 
-std::vector<VertexInfo> PMDmodel::GetVertexInfo()
+std::vector<PMDVertexInfo> PMDmodel::GetVertexInfo()
 {
 	return _vivec;
 }
@@ -102,7 +104,7 @@ void PMDmodel::LoadModel(ID3D12Device* _dev,const std::string modelPath)
 
 	for (auto& vi : _vivec)
 	{
-		fread(&vi, sizeof(VertexInfo), 1, fp);
+		fread(&vi, sizeof(PMDVertexInfo), 1, fp);
 	}
 
 	// インデックス情報の読み込み

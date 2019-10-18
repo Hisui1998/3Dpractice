@@ -59,7 +59,7 @@ Out vs( float3 pos : POSITION,
     Out o;
     float w = weight / 100.f;
     matrix m = boneMats[boneno.x] * w + boneMats[boneno.y] * (1 - w);
-    pos = mul(m, float4(pos,1));
+    // pos = mul(m, float4(pos,1));
 
     o.pos = mul(world, float4(pos, 1));
     o.svpos = mul(wvp, float4(pos, 1));
@@ -73,16 +73,19 @@ Out vs( float3 pos : POSITION,
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
 {
+    // 視線ベクトル
+    float3 eye = float3(0, 18, -20);
+    float3 ray = o.pos.xyz - eye;
+
     float3 light = normalize(float3(1, -1, 1)); //光の向かうベクトル(平行光線)
-    float3 lightColor = float3(1, 1, 1); //ライトのカラー(1,1,1で真っ白)
 
     //ディフューズ計算
     float diffuseB = saturate(dot(-light, o.normal));
-    float4 toonDif = toon.Sample(smpToon, float2(0, 1.0 - diffuseB));
+    float4 toonDif = toon.Sample(smpToon, float2(0, 1 - diffuseB));
 
     //光の反射ベクトル
     float3 refLight = normalize(reflect(light, o.normal.xyz));
-    float specularB = pow(saturate(dot(refLight, float3(0,0,0))), specular.a);
+    float specularB = pow(saturate(dot(refLight, -ray)), specular.a);
 
     //スフィアマップ用UV
     float2 sphereMapUV = o.vnormal.xy;
@@ -90,8 +93,10 @@ float4 ps(Out o):SV_TARGET
 
     float4 texColor = tex.Sample(smp, o.uv); //テクスチャカラー
 
+    return texColor; //テクスチャカラー
+
     return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
             + spa.Sample(smp, sphereMapUV) * texColor 
-            + float4(specularB * specular.rgb, 1) 
-            + float4(texColor.xyz * ambient * 0.5, 1); 
+            + saturate(float4(specularB * specular.rgb, 1))
+            + float4(texColor.xyz * ambient * 0.2, 1); 
 }

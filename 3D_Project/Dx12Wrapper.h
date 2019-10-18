@@ -8,6 +8,7 @@
 #include <map>
 
 class PMDmodel;
+class PMXmodel;
 
 // çsóÒÇÃç\ë¢ëÃ
 struct WVPMatrix {
@@ -103,7 +104,8 @@ private:
 	WVPMatrix _wvp;
 	float angle;// äpìx
 
-	std::shared_ptr<PMDmodel> model;
+	std::shared_ptr<PMDmodel> pmdModel;
+	std::shared_ptr<PMXmodel> pmxModel;
 public:
 	Dx12Wrapper(HWND hwnd);
 	~Dx12Wrapper();
