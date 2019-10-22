@@ -47,12 +47,17 @@ struct PMXMaterial {
 };
 #pragma pack()
 
-// 色情報の構造体
+// 色情報の構造体(正直いらんかもしれん)
 struct PMXColor
 {
-	DirectX::XMFLOAT4 diffuse;
-	DirectX::XMFLOAT4 specular;
-	DirectX::XMFLOAT3 ambient;
+	XMFLOAT4 diffuse;
+	XMFLOAT4 specular;
+	XMFLOAT3 ambient;
+};
+
+struct BoneInfo {
+	XMFLOAT4 pos;
+
 };
 
 class PMXmodel
@@ -92,6 +97,8 @@ private:
 	std::vector<ID3D12Resource*> _toonResources;// トゥーン
 	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
 
+
+	std::vector<DirectX::XMMATRIX>_bone;
 	std::vector<DirectX::XMMATRIX>_boneMats;
 	DirectX::XMMATRIX* _mappedBones;
 

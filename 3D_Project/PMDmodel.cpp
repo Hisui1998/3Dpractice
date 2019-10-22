@@ -14,7 +14,7 @@
 
 PMDmodel::PMDmodel(ID3D12Device* _dev, const std::string modelPath):angle(0.0f)
 {
-	// PMDファイルの読み込み
+	// モデルファイルの読み込み
 	LoadModel(_dev,modelPath);
 }
 
@@ -24,8 +24,8 @@ PMDmodel::~PMDmodel()
 
 void PMDmodel::UpDate()
 {
-	angle = DirectX::XM_PIDIV4;
-	//angle+=10*DirectX::XM_PI/180;
+	//angle = DirectX::XM_PIDIV4;
+	angle+=10*DirectX::XM_PI/180;
 	// 実験
 	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 	RotationMatrix("右肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("右ひじ", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("左肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("左ひじ", DirectX::XMFLOAT3(angle, 0, 0));
