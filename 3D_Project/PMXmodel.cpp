@@ -17,7 +17,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	FILE*fp;
 	PMXHeader header;
 	std::string ModelPath = modelPath;
-	std::string FolderPath = ModelPath.substr(0, ModelPath.rfind('/')+1);
+	FolderPath = ModelPath.substr(0, ModelPath.rfind('/')+1);
 	fopen_s(&fp, ModelPath.c_str(), "rb");
 
 	// ヘッダー情報の読み込み
@@ -157,6 +157,8 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	auto result = CreateWhiteTexture(_dev);
 	// くろてくすちゃつくる
 	result = CreateBlackTexture(_dev);
+	// グラデーションテクスチャつくる
+	result = CreateGrayGradationTexture(_dev);
 
 	result = CreateMaterialBuffer(_dev);
 
@@ -305,8 +307,16 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 		std::string toonFilePath = "toon/";
 		char toonFileName[16];
 		sprintf_s(toonFileName, "toon%02d.bmp", _materials[i].toonIndex + 1);
+		if (!_materials[i].toonFlag)
+		{
+			if (_materials[i].toonIndex!=255)
+			{
+				toonFilePath = FolderPath;
+				sprintf_s(toonFileName, _texVec[_materials[i].toonIndex].c_str());
+			}
+		}
 		toonFilePath += toonFileName;
-		_toonResources[i] = whiteTex;//LoadTextureFromFile(toonFilePath, _dev);
+		_toonResources[i] = LoadTextureFromFile(toonFilePath, _dev);
 
 		// 定数バッファの作成
 		matDesc.BufferLocation = _materialsBuff[i]->GetGPUVirtualAddress();
@@ -495,4 +505,54 @@ std::wstring PMXmodel::GetWstringFromString(const std::string& str)
 	);
 
 	return wstr;
+}
+
+HRESULT PMXmodel::CreateGrayGradationTexture(ID3D12Device* _dev)
+{
+	// 転送する用のヒープ設定
+	D3D12_HEAP_PROPERTIES texHeapProp = {};
+	texHeapProp.Type = D3D12_HEAP_TYPE_CUSTOM;
+	texHeapProp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+	texHeapProp.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+	texHeapProp.CreationNodeMask = 0;
+	texHeapProp.VisibleNodeMask = 0;
+
+	D3D12_RESOURCE_DESC resDesc = {};
+	resDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	resDesc.Width = 4;
+	resDesc.Height = 256;
+	resDesc.DepthOrArraySize = 1;
+	resDesc.SampleDesc.Count = 1;
+	resDesc.SampleDesc.Quality = 0;
+	resDesc.MipLevels = 1;
+	resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	resDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	resDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	// 上が白くてしたが黒いテクスチャデータの作成
+	auto result = _dev->CreateCommittedResource(
+		&texHeapProp,
+		D3D12_HEAP_FLAG_NONE,//特に指定なし
+		&resDesc,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		nullptr,
+		IID_PPV_ARGS(&gradTex)
+	);
+
+	std::vector<unsigned int> data(4 * 256);
+	auto it = data.begin();
+	unsigned int c = 0xff;
+	for (; it != data.end(); it += 4) {
+		auto col = (c << 0xff) | (c << 16) | (c << 8) | c;
+		std::fill(it, it + 4, col);
+		--c;
+	}
+
+	result = gradTex->WriteToSubresource(0,
+		nullptr,
+		data.data(),
+		4 * sizeof(unsigned int),
+		sizeof(unsigned int)*data.size());
+
+	return result;
 }

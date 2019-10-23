@@ -32,7 +32,8 @@ HRESULT Dx12Wrapper::DeviceInit()
 		if (SUCCEEDED(result)) {
 			level = lv;
 			pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミクmetal.pmd");
-			pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア標準ボーン.pmx");
+			//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx");
+			pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx");
 			break;
 		}
 	}
@@ -422,12 +423,19 @@ HRESULT Dx12Wrapper::CreateConstantBuffer()
 	auto result = _dev->CreateDescriptorHeap(&rgstDesc,IID_PPV_ARGS(&_rgstDescHeap));
 	auto wsize = Application::Instance().GetWindowSize();
 
-
-	DirectX::XMFLOAT3 eye(0,13,-15);
+	// 上半身
+	/*DirectX::XMFLOAT3 eye(0,10,-5);
 	DirectX::XMFLOAT3 target(0,10,0);
-	DirectX::XMFLOAT3 up(0,1,0);
+	DirectX::XMFLOAT3 up(0,1,0);*/
 
-	angle = 0.0f;
+	// 見上げる
+	DirectX::XMFLOAT3 eye(0, 8, -10);
+	DirectX::XMFLOAT3 target(0, 8, 10);
+	DirectX::XMFLOAT3 up(0, 1, 0);
+
+
+
+	angle = 0.f;
 
 	_wvp.world = DirectX::XMMatrixRotationY(angle);
 
@@ -609,7 +617,7 @@ void Dx12Wrapper::UpDate()
 	pmxModel->UpDate();
 
 	// 回転するやつ
-	angle = 0.01f;
+	angle = 0.00f;
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
 
 	_wvp.wvp = _wvp.world;

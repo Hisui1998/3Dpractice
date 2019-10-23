@@ -76,6 +76,8 @@ private:
 
 	ID3D12Resource* LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev);
 
+	HRESULT CreateGrayGradationTexture(ID3D12Device* _dev);
+
 	std::vector<PMXVertexInfo> vertexInfo;
 	std::vector<unsigned int> _verindex;
 	std::vector<std::string>_texVec;
@@ -84,6 +86,7 @@ private:
 	// 白黒テクスチャ
 	ID3D12Resource* whiteTex = nullptr;
 	ID3D12Resource* blackTex = nullptr;
+	ID3D12Resource* gradTex = nullptr;
 
 	ID3D12Resource* _boneBuffer;// ボーンバッファ
 	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ
@@ -99,6 +102,7 @@ private:
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
 
 	PMXColor* MapColor = nullptr;
+	std::string FolderPath;
 public:
 	PMXmodel(ID3D12Device* _dev, const std::string modelPath);
 	~PMXmodel();
