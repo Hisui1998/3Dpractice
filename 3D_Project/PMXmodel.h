@@ -28,6 +28,45 @@ struct PMXVertexInfo {
 	float edge;
 };
 
+// 以下もーふの種別毎の構造体
+struct MoephOffsets
+{
+	struct VertexMoeph
+	{
+		int verIdx;
+		XMFLOAT3 pos;
+	}vertexMoeph;
+	struct UVMoeph
+	{
+		int verIdx;
+		XMFLOAT4 uvOffset;//※通常UVはz,wが不要項目になるがモーフとしてのデータ値は記録しておく
+	}uvMoeph;
+	struct BoneMoeph {
+		int boneIdx;
+		XMFLOAT3 moveVal;
+		XMFLOAT4 rotation;
+	}boneMoeph;
+	struct MaterialMoeph
+	{
+		int materialIdx;
+		char type;
+		// 以下　乗算：1.0/加算：0.0が初期値となる
+		XMFLOAT4 diffuse;
+		XMFLOAT3 specular;
+		float specularPow;
+		XMFLOAT3 ambient;
+		XMFLOAT4 edgeColor;
+		float edgeSize;
+		XMFLOAT4 texPow;
+		XMFLOAT4 sphTexPow;
+		XMFLOAT4 toonTexPow;
+	}materialMoeph;
+	struct GroupMoeph {
+		int moephIdx;
+		float moephPar;// モーフ率 : グループモーフのモーフ値 * モーフ率 = 対象モーフのモーフ値
+	}groupMoeph;
+};
+
 // PMXもーふ情報
 struct Morph {
 	unsigned char category;// どこを動かすかー1:眉(左下) 2:目(左上) 3:口(右上) 4:その他(右下)  | 0:システム予約
@@ -100,6 +139,7 @@ struct PMXColor
 	XMFLOAT3 ambient;
 };
 
+// PMXモデルのクラス
 class PMXmodel
 {
 private:
@@ -128,6 +168,8 @@ private:
 
 	std::map<std::vector<wchar_t>, BoneInfo> _boneNames;// ボーンの名前からボーン情報をとってくる
 
+	std::map<std::vector<wchar_t>, std::vector<MoephOffsets>> _moephData;// もーふの名前からもーふ情報をとってくる
+
 	std::vector<PMXVertexInfo> vertexInfo;
 	std::vector<unsigned int> _verindex;
 	std::vector<std::string>_texVec;
@@ -149,6 +191,9 @@ private:
 	std::vector<BoneInfo>_bones;
 	std::vector<DirectX::XMMATRIX>_boneMats;
 	DirectX::XMMATRIX* _mappedBones;
+
+	std::vector <Morph> _morphs;
+	std::vector<MoephOffsets> _moephOffsets;
 
 	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ

@@ -242,6 +242,75 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		_boneNames[jbonename] = _bones[i];
 	}
 
+	// もーふ(表情)の読み込み
+	int morphNum=0;
+	fread(&morphNum, sizeof(morphNum), 1, fp);
+	_morphs.resize(morphNum);
+
+	for (int i = 0; i< morphNum; ++i)
+	{
+		int name;
+		fread(&name, sizeof(name), 1, fp);
+		std::vector<wchar_t> jname;
+		jname.resize(name / 2);
+		for (auto& mn : jname)
+		{
+			fread(&mn, sizeof(mn), 1, fp);
+		}
+
+		std::vector<wchar_t> ename;
+		fread(&name, sizeof(name), 1, fp);
+		ename.resize(name / 2);
+		for (auto& mn : ename)
+		{
+			fread(&mn, sizeof(mn), 1, fp);
+		}
+
+		fread(&_morphs[i], sizeof(_morphs[i]), 1, fp);
+		_moephOffsets.resize(_morphs[i].dataNum);
+
+		for (int num = 0; num < _morphs[i].dataNum; ++num)
+		{
+			if (_morphs[i].type == 0)
+			{
+				fread(&_moephOffsets[num].groupMoeph.moephIdx, header.data[6], 1, fp);
+				fread(&_moephOffsets[num].groupMoeph.moephPar, sizeof(_moephOffsets[num].groupMoeph.moephPar), 1, fp);
+			}
+			else if (_morphs[i].type == 1)
+			{
+				fread(&_moephOffsets[num].vertexMoeph.verIdx, header.data[2], 1, fp);
+				fread(&_moephOffsets[num].vertexMoeph.pos, sizeof(_moephOffsets[num].vertexMoeph.pos), 1, fp);
+			}
+			else if (_morphs[i].type == 2)
+			{
+				fread(&_moephOffsets[num].boneMoeph.boneIdx, header.data[5], 1, fp);
+				fread(&_moephOffsets[num].boneMoeph.moveVal, sizeof(_moephOffsets[num].boneMoeph.moveVal), 1, fp);
+				fread(&_moephOffsets[num].boneMoeph.rotation, sizeof(_moephOffsets[num].boneMoeph.rotation), 1, fp);
+
+			}
+			else if (_morphs[i].type == 8)
+			{
+				fread(&_moephOffsets[num].materialMoeph.materialIdx, header.data[4], 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.type, sizeof(_moephOffsets[num].materialMoeph.type), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.diffuse, sizeof(_moephOffsets[num].materialMoeph.diffuse), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.specular, sizeof(_moephOffsets[num].materialMoeph.specular), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.specularPow, sizeof(_moephOffsets[num].materialMoeph.specularPow), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.ambient, sizeof(_moephOffsets[num].materialMoeph.ambient), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.edgeColor, sizeof(_moephOffsets[num].materialMoeph.edgeColor), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.edgeSize, sizeof(_moephOffsets[num].materialMoeph.edgeSize), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.texPow, sizeof(_moephOffsets[num].materialMoeph.texPow), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.sphTexPow, sizeof(_moephOffsets[num].materialMoeph.sphTexPow), 1, fp);
+				fread(&_moephOffsets[num].materialMoeph.toonTexPow, sizeof(_moephOffsets[num].materialMoeph.toonTexPow), 1, fp);
+			}
+			else
+			{
+				fread(&_moephOffsets[num].uvMoeph.verIdx, header.data[2], 1, fp);
+				fread(&_moephOffsets[num].uvMoeph.uvOffset, sizeof(_moephOffsets[num].uvMoeph.uvOffset), 1, fp);
+			}
+		}
+		_moephData[jname] = _moephOffsets;
+	}	
+
 	fclose(fp);
 
 	// 各バッファの初期化
