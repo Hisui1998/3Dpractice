@@ -59,7 +59,7 @@ Out vs( float3 pos : POSITION,
     Out o;
     float w = weight / 100.f;
     matrix m = boneMats[boneno.x] * w + boneMats[boneno.y] * (1 - w);
-    // pos = mul(m, float4(pos,1));
+    //pos = mul(m, float4(pos,1));
 
     o.pos = mul(world, float4(pos, 1));
     o.svpos = mul(wvp, float4(pos, 1));
@@ -97,6 +97,6 @@ float4 ps(Out o):SV_TARGET
 
     return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
             + spa.Sample(smp, sphereMapUV) * texColor 
-            + saturate(float4(specularB * specular.rgb, 1))
+            + saturate(float4(specularB * specular.rgba, 1))
             + float4(texColor.xyz * ambient * 0.2, 1); 
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include "PMXmodel.h"
 #include <d3d12.h>
+#include <iostream>
 #include <dxgi1_6.h>
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
@@ -115,6 +116,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	int matNum = 0;
 	fread(&matNum, sizeof(matNum), 1, fp);
 	_materials.resize(matNum);
+	str = {};
 	for (int i = 0; i < matNum; ++i)
 	{
 		int num;
@@ -124,7 +126,15 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		fread(&num, sizeof(num), 1, fp);
 		fseek(fp, num, SEEK_CUR);
 
-		fread(&_materials[i], 65, 1, fp);
+
+		fread(&_materials[i].Diffuse, sizeof(_materials[i].Diffuse), 1, fp);// ディフューズの読み込み
+
+		fread(&_materials[i].Specular, sizeof(_materials[i].Specular), 1, fp);
+		fread(&_materials[i].SpecularPow, sizeof(_materials[i].SpecularPow), 1, fp);
+		fread(&_materials[i].Ambient, sizeof(_materials[i].Ambient), 1, fp);
+		fread(&_materials[i].bitFlag, sizeof(_materials[i].bitFlag), 1, fp);
+		fread(&_materials[i].edgeColor, sizeof(_materials[i].edgeColor), 1, fp);
+		fread(&_materials[i].edgeSize, sizeof(_materials[i].edgeSize), 1, fp);
 		fread(&_materials[i].texIndex, header.data[3], 1, fp);
 		fread(&_materials[i].sphereIndex, header.data[3], 1, fp);
 		fread(&_materials[i].sphereMode, sizeof(_materials[i].sphereMode), 1, fp);
@@ -132,12 +142,25 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		fread(&_materials[i].toonIndex, _materials[i].toonFlag?sizeof(unsigned char):header.data[3], 1, fp);
 		
 		fread(&num, sizeof(num), 1, fp);
-		fseek(fp, num, SEEK_CUR);
+		for (int n = 0; n < num; n++)
+		{
+			char c;
+			fread(&c, sizeof(char), 1, fp);
+			str += c;
+		}
+		std::cout << str.c_str() << std::endl;
+		str = {};
+
 		fread(&_materials[i].faceVerCnt, sizeof(_materials[i].faceVerCnt), 1, fp);
 	}
 
+	// ボーン読み込み
+	int boneNum = 0;
+	fread(&boneNum, sizeof(boneNum), 1, fp);
+
 	fclose(fp);
 
+	// 各バッファの初期化
 	_materialsBuff.resize(matNum);
 	_toonResources.resize(matNum);
 	_textureBuffer.resize(matNum);
