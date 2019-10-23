@@ -158,8 +158,8 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	fread(&boneNum, sizeof(boneNum), 1, fp);
 	_bones.resize(boneNum);
 
-	std::vector<wchar_t> jbonename;
-	std::vector<wchar_t> ebonename;
+	std::wstring jbonename;
+	std::wstring ebonename;
 	for (int i = 0;i< boneNum;++i)
 	{
 		int jnamenum;
@@ -251,16 +251,16 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	{
 		int name;
 		fread(&name, sizeof(name), 1, fp);
-		std::vector<wchar_t> jname;
+		std::wstring jname;
 		jname.resize(name / 2);
 		for (auto& mn : jname)
 		{
 			fread(&mn, sizeof(mn), 1, fp);
 		}
 
-		std::vector<wchar_t> ename;
+		std::wstring ename;
 		fread(&name, sizeof(name), 1, fp);
-		ename.resize(name / 2);
+		ename.resize(name/2);
 		for (auto& mn : ename)
 		{
 			fread(&mn, sizeof(mn), 1, fp);
@@ -460,7 +460,6 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 		MapColor->specular.z = _materials[midx].Specular.z;
 		MapColor->specular.w = _materials[midx].SpecularPow;
 
-		mbuff->Unmap(0, nullptr);
 		++midx;
 	}
 
@@ -599,6 +598,7 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 
 void PMXmodel::UpDate()
 {
+
 }
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)

@@ -166,9 +166,9 @@ private:
 
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
-	std::map<std::vector<wchar_t>, BoneInfo> _boneNames;// ボーンの名前からボーン情報をとってくる
+	std::map<std::wstring, BoneInfo> _boneNames;// ボーンの名前からボーン情報をとってくる
 
-	std::map<std::vector<wchar_t>, std::vector<MoephOffsets>> _moephData;// もーふの名前からもーふ情報をとってくる
+	std::map<std::wstring, std::vector<MoephOffsets>> _moephData;// もーふの名前からもーふ情報をとってくる
 
 	std::vector<PMXVertexInfo> vertexInfo;
 	std::vector<unsigned int> _verindex;
