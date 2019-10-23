@@ -28,6 +28,14 @@ struct PMXVertexInfo {
 	float edge;
 };
 
+// PMXもーふ情報
+struct Morph {
+	unsigned char category;// どこを動かすかー1:眉(左下) 2:目(左上) 3:口(右上) 4:その他(右下)  | 0:システム予約
+	unsigned char type;// もーふの種類ー0:グループ, 1:頂点, 2:ボーン, 3:UV, 4:追加UV1, 5:追加UV2, 6:追加UV3, 7:追加UV4, 8:マテリアル
+	int dataNum;// 後続の要素数
+};
+
+// PMXマテリアル情報
 struct PMXMaterial {
 	XMFLOAT4 Diffuse;//16
 	XMFLOAT3 Specular;//12
@@ -45,6 +53,43 @@ struct PMXMaterial {
 	// コメントがあるからFseekすること
 	int faceVerCnt;
 };
+
+// IK情報
+struct IKdata {
+	int boneIdx;
+	int loopCnt;
+	float limrad;// IKループ計算時の制限角度
+	int linkNum;// 後続の要素数
+
+	int linkboneIdx;
+	char isRadlim;
+
+	XMFLOAT3 minRadlim;// 角度制限下限
+	XMFLOAT3 maxRadlim;// 角度制限上限
+};
+
+// ボーン情報
+struct BoneInfo {
+	XMFLOAT3 pos;
+	int parentboneIndex;// 親のボーンIndex
+	int tranceLevel;// 変形階層
+	unsigned short bitFlag;// ボーンフラグ(こっから継続データが変化)
+
+	XMFLOAT3 offset;// 座標ｵﾌｾｯﾄ
+	int boneIndex;
+
+	int grantIndex;// 付与ボーンのボーンインデックス
+	float grantPar;// 付与率
+
+	XMFLOAT3 axisvector;// 軸の方向ベクトル
+
+	XMFLOAT3 axisXvector;// X軸の方向ベクトル
+	XMFLOAT3 axisZvector;// Z軸の方向ベクトル 
+
+	int key;// Key値
+
+	IKdata IkData;
+};
 #pragma pack()
 
 // 色情報の構造体(正直いらんかもしれん)
@@ -53,11 +98,6 @@ struct PMXColor
 	XMFLOAT4 diffuse;
 	XMFLOAT4 specular;
 	XMFLOAT3 ambient;
-};
-
-struct BoneInfo {
-	XMFLOAT4 pos;
-
 };
 
 class PMXmodel
@@ -83,6 +123,11 @@ private:
 
 	HRESULT CreateGrayGradationTexture(ID3D12Device* _dev);
 
+
+	PMXHeader header;// ヘッダー情報が入ってるよ
+
+	std::map<std::vector<wchar_t>, BoneInfo> _boneNames;// ボーンの名前からボーン情報をとってくる
+
 	std::vector<PMXVertexInfo> vertexInfo;
 	std::vector<unsigned int> _verindex;
 	std::vector<std::string>_texVec;
@@ -101,7 +146,7 @@ private:
 	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
 
 
-	std::vector<DirectX::XMMATRIX>_bone;
+	std::vector<BoneInfo>_bones;
 	std::vector<DirectX::XMMATRIX>_boneMats;
 	DirectX::XMMATRIX* _mappedBones;
 
@@ -128,4 +173,3 @@ public:
 	ID3D12DescriptorHeap*& GetBoneHeap() { return _boneHeap; };
 	ID3D12DescriptorHeap*& GetMaterialHeap() { return _matDescHeap; };
 };
-

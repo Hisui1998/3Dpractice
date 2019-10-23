@@ -16,7 +16,6 @@
 void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 {
 	FILE*fp;
-	PMXHeader header;
 	std::string ModelPath = modelPath;
 	FolderPath = ModelPath.substr(0, ModelPath.rfind('/')+1);
 	fopen_s(&fp, ModelPath.c_str(), "rb");
@@ -51,20 +50,20 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		// 変形形式別の読み込み
 		if (vi.weight == 0)
 		{
-			fread(&vi.boneIdxSize[0],header.data[2], 1, fp);
+			fread(&vi.boneIdxSize[0],header.data[5], 1, fp);
 		}
 		else if (vi.weight == 1)
 		{
-			fread(&vi.boneIdxSize[0], header.data[2], 1, fp);
-			fread(&vi.boneIdxSize[1], header.data[2], 1, fp);
+			fread(&vi.boneIdxSize[0], header.data[5], 1, fp);
+			fread(&vi.boneIdxSize[1], header.data[5], 1, fp);
 			fread(&vi.boneweight[0], sizeof(float), 1, fp);
 		}
 		else if (vi.weight == 2)
 		{
-			fread(&vi.boneIdxSize[0], header.data[2], 1, fp);
-			fread(&vi.boneIdxSize[1], header.data[2], 1, fp);
-			fread(&vi.boneIdxSize[2], header.data[2], 1, fp);
-			fread(&vi.boneIdxSize[3], header.data[2], 1, fp);
+			fread(&vi.boneIdxSize[0], header.data[5], 1, fp);
+			fread(&vi.boneIdxSize[1], header.data[5], 1, fp);
+			fread(&vi.boneIdxSize[2], header.data[5], 1, fp);
+			fread(&vi.boneIdxSize[3], header.data[5], 1, fp);
 			fread(&vi.boneweight[0], sizeof(float), 1, fp);
 			fread(&vi.boneweight[1], sizeof(float), 1, fp);
 			fread(&vi.boneweight[2], sizeof(float), 1, fp);
@@ -72,12 +71,12 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		}
 		else if (vi.weight == 3)
 		{
-			fread(&vi.boneIdxSize[0], header.data[2], 1, fp);
-			fread(&vi.boneIdxSize[1], header.data[2], 1, fp);
+			fread(&vi.boneIdxSize[0], header.data[5], 1, fp);
+			fread(&vi.boneIdxSize[1], header.data[5], 1, fp);
 			fread(&vi.boneweight[0], sizeof(float), 1, fp);
-			fread(&vi.SDEFdata[0], header.data[2], 1, fp);
-			fread(&vi.SDEFdata[1], header.data[2], 1, fp);
-			fread(&vi.SDEFdata[2], header.data[2], 1, fp);
+			fread(&vi.SDEFdata[0], sizeof(vi.SDEFdata[0]), 1, fp);
+			fread(&vi.SDEFdata[1], sizeof(vi.SDEFdata[1]), 1, fp);
+			fread(&vi.SDEFdata[2], sizeof(vi.SDEFdata[2]), 1, fp);
 		}
 
 		// エッジの読み込み
@@ -157,6 +156,91 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	// ボーン読み込み
 	int boneNum = 0;
 	fread(&boneNum, sizeof(boneNum), 1, fp);
+	_bones.resize(boneNum);
+
+	std::vector<wchar_t> jbonename;
+	std::vector<wchar_t> ebonename;
+	for (int i = 0;i< boneNum;++i)
+	{
+		int jnamenum;
+		fread(&jnamenum, sizeof(jnamenum), 1, fp);
+		jbonename.resize(jnamenum /2);
+		for (auto& bn: jbonename)
+		{
+			fread(&bn, sizeof(bn), 1, fp);
+		}
+
+		int enamenum;
+		fread(&enamenum, sizeof(enamenum), 1, fp);
+		ebonename.resize(enamenum / 2);
+		for (auto& bn : ebonename)
+		{
+			fread(&bn, sizeof(bn), 1, fp);
+		}
+	
+		fread(&_bones[i].pos, sizeof(_bones[i].pos), 1, fp);
+		fread(&_bones[i].parentboneIndex, header.data[5], 1, fp);
+		fread(&_bones[i].tranceLevel, sizeof(_bones[i].tranceLevel), 1, fp);
+		fread(&_bones[i].bitFlag, sizeof(_bones[i].bitFlag), 1, fp);
+
+		// 接続先
+		if (_bones[i].bitFlag & 0x0001)
+		{
+			fread(&_bones[i].boneIndex, header.data[5], 1, fp);
+		}
+		else 
+		{
+			fread(&_bones[i].offset, sizeof(_bones[i].offset), 1, fp);
+		}
+
+		// 回転付与 と 移動付与
+		if ((_bones[i].bitFlag & 0x0100) || (_bones[i].bitFlag & 0x0200))
+		{
+			fread(&_bones[i].grantIndex, header.data[5], 1, fp);
+			fread(&_bones[i].grantPar, sizeof(_bones[i].grantPar), 1, fp);
+		}
+
+		// 軸固定
+		if (_bones[i].bitFlag & 0x0400)
+		{
+			fread(&_bones[i].axisvector, sizeof(_bones[i].axisvector), 1, fp);
+		}
+
+		// ローカル軸
+		if (_bones[i].bitFlag & 0x0800)
+		{
+			fread(&_bones[i].axisXvector, sizeof(_bones[i].axisXvector), 1, fp);
+			fread(&_bones[i].axisZvector, sizeof(_bones[i].axisZvector), 1, fp);
+		}
+
+		// 外部親変形
+		if (_bones[i].bitFlag & 0x2000)
+		{
+			fread(&_bones[i].key, sizeof(_bones[i].key), 1, fp);
+		}
+
+		// IKデータ
+		if (_bones[i].bitFlag & 0x0020)
+		{
+			fread(&_bones[i].IkData.boneIdx, header.data[5], 1, fp);
+			fread(&_bones[i].IkData.loopCnt, sizeof(_bones[i].IkData.loopCnt), 1, fp);
+			fread(&_bones[i].IkData.limrad, sizeof(_bones[i].IkData.limrad), 1, fp);
+
+			// IKリンク
+			fread(&_bones[i].IkData.linkNum, sizeof(_bones[i].IkData.linkNum), 1, fp);
+			for (int num = 0;num< _bones[i].IkData.linkNum;++num)
+			{
+				fread(&_bones[i].IkData.linkboneIdx, header.data[5], 1, fp);
+				fread(&_bones[i].IkData.isRadlim, sizeof(_bones[i].IkData.isRadlim), 1, fp);
+				if (_bones[i].IkData.isRadlim)
+				{
+					fread(&_bones[i].IkData.minRadlim, sizeof(_bones[i].IkData.minRadlim), 1, fp);
+					fread(&_bones[i].IkData.maxRadlim, sizeof(_bones[i].IkData.maxRadlim), 1, fp);
+				}
+			}
+		}
+		_boneNames[jbonename] = _bones[i];
+	}
 
 	fclose(fp);
 
@@ -330,6 +414,7 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 		std::string toonFilePath = "toon/";
 		char toonFileName[16];
 		sprintf_s(toonFileName, "toon%02d.bmp", _materials[i].toonIndex + 1);
+		// 固有トゥーンの場合分け
 		if (!_materials[i].toonFlag)
 		{
 			if (_materials[i].toonIndex!=255)
@@ -338,6 +423,7 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 				sprintf_s(toonFileName, _texVec[_materials[i].toonIndex].c_str());
 			}
 		}
+
 		toonFilePath += toonFileName;
 		_toonResources[i] = LoadTextureFromFile(toonFilePath, _dev);
 
