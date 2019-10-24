@@ -340,8 +340,30 @@ HRESULT Dx12Wrapper::CreateGraphicsPipelineState()
 	gpsDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	gpsDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 
+	//レンダーターゲットブレンド設定用構造体
+	D3D12_RENDER_TARGET_BLEND_DESC renderBlend = {};
+	renderBlend.BlendEnable = TRUE;
+	renderBlend.LogicOpEnable = FALSE;
+	renderBlend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	renderBlend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	renderBlend.BlendOp = D3D12_BLEND_OP_ADD;
+	renderBlend.SrcBlendAlpha = D3D12_BLEND_ONE;
+	renderBlend.DestBlendAlpha = D3D12_BLEND_ZERO;
+	renderBlend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	renderBlend.LogicOp = D3D12_LOGIC_OP_NOOP;
+	renderBlend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+	//ブレンドステート設定用構造体
+	D3D12_BLEND_DESC blend = {};
+	blend.AlphaToCoverageEnable = TRUE;
+	blend.IndependentBlendEnable = FALSE;
+	for (auto &br:blend.RenderTarget) {
+		br = renderBlend;
+	}
+
+
 	//その他
-	gpsDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	gpsDesc.BlendState = blend;
 	gpsDesc.NodeMask = 0;
 	gpsDesc.SampleDesc.Count = 1;
 	gpsDesc.SampleDesc.Quality = 0;
@@ -435,7 +457,7 @@ HRESULT Dx12Wrapper::CreateConstantBuffer()
 
 
 
-	angle = -0.f;
+	angle = 0.f;
 
 	_wvp.world = DirectX::XMMatrixRotationY(angle);
 
@@ -617,7 +639,7 @@ void Dx12Wrapper::UpDate()
 	pmxModel->UpDate();
 
 	// 回転するやつ
-	angle = 0.00f;
+	angle = 0.001f;
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
 
 	_wvp.wvp = _wvp.world;
@@ -761,5 +783,5 @@ void Dx12Wrapper::UpDate()
 	// 待ち
 	WaitWithFence();
 
-	_swapchain->Present(1, 0);
+	_swapchain->Present(0, 0);
 }

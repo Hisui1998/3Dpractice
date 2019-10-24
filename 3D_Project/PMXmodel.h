@@ -29,24 +29,26 @@ struct PMXVertexInfo {
 };
 
 // 以下もーふの種別毎の構造体
-struct MoephOffsets
-{
-	struct VertexMoeph
+struct MorphOffsets{
+	struct VertexMorph
 	{
 		int verIdx;
 		XMFLOAT3 pos;
-	}vertexMoeph;
-	struct UVMoeph
+	}vertexMorph;
+
+	struct UVMorph
 	{
 		int verIdx;
 		XMFLOAT4 uvOffset;//※通常UVはz,wが不要項目になるがモーフとしてのデータ値は記録しておく
-	}uvMoeph;
-	struct BoneMoeph {
+	}uvMorph;
+
+	struct BoneMorph {
 		int boneIdx;
 		XMFLOAT3 moveVal;
 		XMFLOAT4 rotation;
-	}boneMoeph;
-	struct MaterialMoeph
+	}boneMorph;
+
+	struct MaterialMorph
 	{
 		int materialIdx;
 		char type;
@@ -60,15 +62,16 @@ struct MoephOffsets
 		XMFLOAT4 texPow;
 		XMFLOAT4 sphTexPow;
 		XMFLOAT4 toonTexPow;
-	}materialMoeph;
-	struct GroupMoeph {
-		int moephIdx;
-		float moephPar;// モーフ率 : グループモーフのモーフ値 * モーフ率 = 対象モーフのモーフ値
-	}groupMoeph;
+	}materialMorph;
+
+	struct GroupMorph {
+		int MorphIdx;
+		float MorphPar;// モーフ率 : グループモーフのモーフ値 * モーフ率 = 対象モーフのモーフ値
+	}groupMorph;
 };
 
 // PMXもーふ情報
-struct Morph {
+struct MorphHeader {
 	unsigned char category;// どこを動かすかー1:眉(左下) 2:目(左上) 3:口(右上) 4:その他(右下)  | 0:システム予約
 	unsigned char type;// もーふの種類ー0:グループ, 1:頂点, 2:ボーン, 3:UV, 4:追加UV1, 5:追加UV2, 6:追加UV3, 7:追加UV4, 8:マテリアル
 	int dataNum;// 後続の要素数
@@ -93,20 +96,6 @@ struct PMXMaterial {
 	int faceVerCnt;
 };
 
-// IK情報
-struct IKdata {
-	int boneIdx;
-	int loopCnt;
-	float limrad;// IKループ計算時の制限角度
-	int linkNum;// 後続の要素数
-
-	int linkboneIdx;
-	char isRadlim;
-
-	XMFLOAT3 minRadlim;// 角度制限下限
-	XMFLOAT3 maxRadlim;// 角度制限上限
-};
-
 // ボーン情報
 struct BoneInfo {
 	XMFLOAT3 pos;
@@ -127,7 +116,19 @@ struct BoneInfo {
 
 	int key;// Key値
 
-	IKdata IkData;
+	// IK情報
+	struct IKdata {
+		int boneIdx;
+		int loopCnt;
+		float limrad;// IKループ計算時の制限角度
+		int linkNum;// 後続の要素数
+
+		int linkboneIdx;
+		char isRadlim;
+
+		XMFLOAT3 minRadlim;// 角度制限下限
+		XMFLOAT3 maxRadlim;// 角度制限上限
+	}IkData;
 };
 #pragma pack()
 
@@ -166,9 +167,10 @@ private:
 
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
-	std::map<std::vector<wchar_t>, BoneInfo> _boneNames;// ボーンの名前からボーン情報をとってくる
+	std::map<std::wstring, BoneInfo> _boneNames;// ボーンの名前からボーン情報をとってくる
 
-	std::map<std::vector<wchar_t>, std::vector<MoephOffsets>> _moephData;// もーふの名前からもーふ情報をとってくる
+	std::map<std::wstring, MorphHeader> _morphHeaders;// もーふの名前からもーふのヘッダー情報をとってくる
+	std::map<std::wstring, std::vector<MorphOffsets>> _morphData;// もーふの名前からもーふ情報をとってくる
 
 	std::vector<PMXVertexInfo> vertexInfo;
 	std::vector<unsigned int> _verindex;
@@ -192,8 +194,6 @@ private:
 	std::vector<DirectX::XMMATRIX>_boneMats;
 	DirectX::XMMATRIX* _mappedBones;
 
-	std::vector <Morph> _morphs;
-	std::vector<MoephOffsets> _moephOffsets;
 
 	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
