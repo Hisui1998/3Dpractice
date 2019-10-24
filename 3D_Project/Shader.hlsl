@@ -93,10 +93,18 @@ float4 ps(Out o):SV_TARGET
 
     float4 texColor = tex.Sample(smp, o.uv); //テクスチャカラー
 
-    //return texColor; //テクスチャカラー
+    texColor.a = 0.501f;
 
-    return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
-            + spa.Sample(smp, sphereMapUV) * texColor 
-            + saturate(float4(specularB * specular.rgb, 1))
-            + float4(texColor.xyz * ambient * 0.2, 1); 
+    return texColor;
+
+    return saturate(toonDif * diffuse * texColor)
+            + saturate(float4(specularB * specular.rgb, texColor.w))
+            + float4(texColor.xyz * ambient * specular.a, texColor.a);
+
+    //return diffuse;
+
+    //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
+    //        + spa.Sample(smp, sphereMapUV) * texColor 
+    //        + saturate(float4(specularB * specular.rgb, texColor.w))
+    //        + float4(texColor.xyz * ambient * 0.2, texColor.w);
 }
