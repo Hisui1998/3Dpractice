@@ -77,7 +77,7 @@ float4 ps(Out o):SV_TARGET
     float3 eye = float3(0, 18, -20);
     float3 ray = o.pos.xyz - eye;
 
-    float3 light = normalize(float3(1, -2, 1)); //光の向かうベクトル(平行光線)
+    float3 light = normalize(float3(1, -1, 1)); //光の向かうベクトル(平行光線)
 
     //ディフューズ計算
     float diffuseB = saturate(dot(-light, o.normal));
@@ -93,15 +93,11 @@ float4 ps(Out o):SV_TARGET
 
     float4 texColor = tex.Sample(smp, o.uv); //テクスチャカラー
 
-    texColor.a = 0.501f;
+    //texColor.a = 0.5f;
+
+    //return float4(texColor.rgb,0.505f);
 
     return texColor;
-
-    return saturate(toonDif * diffuse * texColor)
-            + saturate(float4(specularB * specular.rgb, texColor.w))
-            + float4(texColor.xyz * ambient * specular.a, texColor.a);
-
-    //return diffuse;
 
     //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
     //        + spa.Sample(smp, sphereMapUV) * texColor 

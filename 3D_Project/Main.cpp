@@ -15,6 +15,9 @@ int main()
 	}
 	else std::cout << "‰Šú‰»Š®—¹" << std::endl;
 
+	std::cout << "UP,DOWN:ƒ‚ƒfƒ‹‚Ìã‰ºˆÚ“®" << std::endl;
+	std::cout << "Q,LEFT,E,RIGHT:ƒ‚ƒfƒ‹‚ÌY²‰ñ“]" << std::endl;
+	std::cout << "WASD:ƒ‚ƒfƒ‹‚Ì•½–ÊˆÚ“®" << std::endl;
 	app.Run();
 
 	app.End();

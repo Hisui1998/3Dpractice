@@ -115,7 +115,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	int matNum = 0;
 	fread(&matNum, sizeof(matNum), 1, fp);
 	_materials.resize(matNum);
-	str = {};
+
 	for (int i = 0; i < matNum; ++i)
 	{
 		int num;
@@ -141,14 +141,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		fread(&_materials[i].toonIndex, _materials[i].toonFlag?sizeof(unsigned char):header.data[3], 1, fp);
 		
 		fread(&num, sizeof(num), 1, fp);
-		for (int n = 0; n < num; n++)
-		{
-			char c;
-			fread(&c, sizeof(char), 1, fp);
-			str += c;
-		}
-		std::cout << str.c_str() << std::endl;
-		str = {};
+		fseek(fp, num, SEEK_CUR);
 
 		fread(&_materials[i].faceVerCnt, sizeof(_materials[i].faceVerCnt), 1, fp);
 	}

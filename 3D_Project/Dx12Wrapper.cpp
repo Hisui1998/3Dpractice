@@ -7,6 +7,8 @@
 #include "PMDmodel.h"
 #include "PMXmodel.h"
 
+#pragma comment(lib, "dinput8.lib")
+#pragma comment(lib, "dxguid.lib")
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"d3dcompiler.lib")
@@ -37,7 +39,18 @@ HRESULT Dx12Wrapper::DeviceInit()
 			break;
 		}
 	}
+
 	result = CreateDXGIFactory1(IID_PPV_ARGS(&_dxgi));
+
+	// DirectInputオブジェクト
+	result = DirectInput8Create(GetModuleHandle(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8,
+		(void**)&_directInput, NULL);
+
+	// キーデバイスの作成
+	result = _directInput->CreateDevice(GUID_SysKeyboard, &_keyBoadDev, nullptr);
+	result =  _keyBoadDev->SetDataFormat(&c_dfDIKeyboard);
+	result = _keyBoadDev->SetCooperativeLevel(_hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+
 	return result;
 }
 
@@ -445,17 +458,10 @@ HRESULT Dx12Wrapper::CreateConstantBuffer()
 	auto result = _dev->CreateDescriptorHeap(&rgstDesc,IID_PPV_ARGS(&_rgstDescHeap));
 	auto wsize = Application::Instance().GetWindowSize();
 
-	// 上半身
-	DirectX::XMFLOAT3 eye(0,10,-5);
-	DirectX::XMFLOAT3 target(0,10,0);
-	DirectX::XMFLOAT3 up(0,1,0);
-
-	// 見上げる
-	/*DirectX::XMFLOAT3 eye(0, 0, -8);
-	DirectX::XMFLOAT3 target(0, 5, 0);
-	DirectX::XMFLOAT3 up(0, 1, 0);*/
-
-
+	// 座標の初期値
+	eye = XMFLOAT3(0,10.5f,-5);
+	target = XMFLOAT3(0, 10.5f,0);
+	up = XMFLOAT3(0,1,0);
 
 	angle = 0.f;
 
@@ -467,8 +473,8 @@ HRESULT Dx12Wrapper::CreateConstantBuffer()
 		DirectX::XMLoadFloat3(&up)
 	);
 
-	_wvp.projection = DirectX::XMMatrixPerspectiveFovLH(
-		DirectX::XM_PIDIV2,
+	_wvp.projection = XMMatrixPerspectiveFovLH(
+		XM_PIDIV2,
 		static_cast<float>(wsize.width) / static_cast<float>(wsize.height),
 		0.1f,
 		300.0f
@@ -573,6 +579,13 @@ Dx12Wrapper::Dx12Wrapper(HWND hwnd):_hwnd(hwnd)
 
 Dx12Wrapper::~Dx12Wrapper()
 {
+	_keyBoadDev->Unacquire();
+
+	if (_keyBoadDev != NULL)
+		_keyBoadDev->Release();
+
+	if (_directInput != NULL)
+		_directInput->Release();
 }
 
 // いろんな初期化チェック
@@ -629,28 +642,117 @@ int Dx12Wrapper::Init()
 	// 定数バッファの作成
 	if (FAILED(CreateConstantBuffer())) 
 		return 11;
-	
+
 	return 0;
 }
 
 // 毎フレーム呼び出す更新処理
 void Dx12Wrapper::UpDate()
 {
+	auto wsize = Application::Instance().GetWindowSize();
+
+	// キーの入力
+	char Oldkey[256];
+	int i = 0;
+	for (auto k : key)
+	{
+		Oldkey[i++] = k;
+	}
+
+	auto isOk = _keyBoadDev->GetDeviceState(sizeof(key), key);
+	if (FAILED(isOk)) {
+		// 失敗なら再開させてもう一度取得
+		_keyBoadDev->Acquire();
+		_keyBoadDev->GetDeviceState(sizeof(key), key);
+	}
+
+	float addsize = 0.5f;
+
+	if (key[DIK_UP])
+	{
+		eye.y += addsize;
+		target.y += addsize;
+	}
+	else if (key[DIK_DOWN])
+	{
+		eye.y-=addsize;
+		target.y-=addsize;
+	}
+
+	if (key[DIK_Q]|| key[DIK_LEFT])
+	{
+		angle += 0.05f;
+	}
+	else if (key[DIK_E] || key[DIK_RIGHT])
+	{
+		angle -= 0.05f;
+	}
+
+	if (key[DIK_W])
+	{
+		eye.z+= addsize;
+		target.z+= addsize;
+	}
+	else if (key[DIK_S])
+	{
+		eye.z-= addsize;
+		target.z-= addsize;
+	}
+
+	if (key[DIK_D])
+	{
+		eye.x+= addsize;
+		target.x+= addsize;
+	}
+	if (key[DIK_A])
+	{
+		eye.x-= addsize;
+		target.x-= addsize;
+	}
+
+	if (key[DIK_R])
+	{
+		eye = XMFLOAT3(0, 10.5f, -5);
+		target = XMFLOAT3(0, 10.5f, 0);
+		up = XMFLOAT3(0, 1, 0);
+
+		angle = 0.f;
+	}
+	if (key[DIK_P])
+	{
+		isOk = 0;
+	}
+	if (key[DIK_P]&&(Oldkey[DIK_P]==0))
+	{
+		float rota[3] = { XM_PIDIV2 ,XM_PIDIV4 ,XM_PIDIV4 / 2 };
+		cnt++;
+		_wvp.projection = XMMatrixPerspectiveFovLH(
+			rota[cnt%3],
+			static_cast<float>(wsize.width) / static_cast<float>(wsize.height),
+			0.1f,
+			300.0f
+		);
+	}
+
+	// 上半身
+	_wvp.view = DirectX::XMMatrixLookAtLH(
+		DirectX::XMLoadFloat3(&eye),
+		DirectX::XMLoadFloat3(&target),
+		DirectX::XMLoadFloat3(&up)
+	);
 	pmxModel->UpDate();
 
 	// 回転するやつ
-	angle = 0.001f;
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
 
 	_wvp.wvp = _wvp.world;
 	_wvp.wvp *= _wvp.view;
 	_wvp.wvp *= _wvp.projection;
 	*_wvpMP = _wvp;
-
-
+	
 
 	auto heapStart = _swcDescHeap->GetCPUDescriptorHandleForHeapStart();
-	float clearColor[] = { 0.5f,0.5f,0.5f,1.0f };//クリアカラー設定
+	float clearColor[] = { 0.5f,0.5f,0.5f,0.0f };//クリアカラー設定
 
 	// ビューポート
 	D3D12_VIEWPORT _viewport;

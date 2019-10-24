@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <d3dx12.h>
 #include <d3d12.h>
+#include <dinput.h>
 #include <dxgi1_6.h>
 #include <DirectXMath.h>
 #include <vector>
@@ -27,9 +28,13 @@ private:
 	IDXGIFactory6* _dxgi = nullptr;
 	IDXGISwapChain4* _swapchain = nullptr;
 	ID3D12Device* _dev = nullptr;
+	ID3D12Device* _keydev = nullptr;
 	ID3D12CommandAllocator* _cmdAlloc = nullptr;
 	ID3D12GraphicsCommandList* _cmdList = nullptr;
 	ID3D12CommandQueue* _cmdQue = nullptr;
+
+	LPDIRECTINPUT8       _directInput;// DirectInput本体
+	LPDIRECTINPUTDEVICE8 _keyBoadDev;// キーボードデバイス
 
 	D3D12_VERTEX_BUFFER_VIEW _vbView = {};
 	D3D12_INDEX_BUFFER_VIEW _ibView = {};
@@ -103,6 +108,12 @@ private:
 	WVPMatrix* _wvpMP;
 	WVPMatrix _wvp;
 	float angle;// 角度
+	int cnt = 0;
+	char key[256] = {};
+
+	DirectX::XMFLOAT3 eye;
+	DirectX::XMFLOAT3 target;
+	DirectX::XMFLOAT3 up;
 
 	std::shared_ptr<PMDmodel> pmdModel;
 	std::shared_ptr<PMXmodel> pmxModel;
