@@ -104,7 +104,7 @@ struct BoneInfo {
 	unsigned short bitFlag;// ボーンフラグ(こっから継続データが変化)
 
 	XMFLOAT3 offset;// 座標ｵﾌｾｯﾄ
-	int boneIndex;
+	int boneIndex;// 接続先ボーン
 
 	int grantIndex;// 付与ボーンのボーンインデックス
 	float grantPar;// 付与率
@@ -119,12 +119,12 @@ struct BoneInfo {
 	// IK情報
 	struct IKdata {
 		int boneIdx;
-		int loopCnt;
+		int loopCnt;// IKループ回数
 		float limrad;// IKループ計算時の制限角度
 		int linkNum;// 後続の要素数
 
-		int linkboneIdx;
-		char isRadlim;
+		int linkboneIdx;// リンク先のボーンインデックス
+		char isRadlim;// 角度制限を付けるかどうか
 
 		XMFLOAT3 minRadlim;// 角度制限下限
 		XMFLOAT3 maxRadlim;// 角度制限上限
@@ -164,10 +164,13 @@ private:
 
 	HRESULT CreateGrayGradationTexture(ID3D12Device* _dev);
 
+	void RotationMatrix(std::string bonename, DirectX::XMFLOAT3 theta);
+
+	void RecursiveMatrixMultiply(BoneInfo& node, DirectX::XMMATRIX& MultiMat);
 
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
-	std::map<std::wstring, BoneInfo> _boneNames;// ボーンの名前からボーン情報をとってくる
+	std::map<std::wstring, BoneInfo> _boneMap;// ボーンの名前からボーン情報をとってくる
 
 	std::map<std::wstring, MorphHeader> _morphHeaders;// もーふの名前からもーふのヘッダー情報をとってくる
 	std::map<std::wstring, std::vector<MorphOffsets>> _morphData;// もーふの名前からもーふ情報をとってくる
@@ -194,6 +197,7 @@ private:
 	std::vector<DirectX::XMMATRIX>_boneMats;
 	DirectX::XMMATRIX* _mappedBones;
 
+	float angle = 0;
 
 	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
@@ -204,7 +208,7 @@ public:
 	PMXmodel(ID3D12Device* _dev, const std::string modelPath);
 	~PMXmodel();
 
-	void UpDate();
+	void UpDate(char key[256]);
 	std::vector<PMXMaterial> GetMaterials() {
 		return _materials;
 	};

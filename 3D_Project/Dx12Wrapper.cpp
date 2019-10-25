@@ -33,7 +33,7 @@ HRESULT Dx12Wrapper::DeviceInit()
 		// 成功しているかのチェック
 		if (SUCCEEDED(result)) {
 			level = lv;
-			pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミクmetal.pmd");
+			//pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミクmetal.pmd");
 			//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx");
 			pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx");
 			break;
@@ -240,7 +240,7 @@ HRESULT Dx12Wrapper::CreateRootSignature()
 	rootParam[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[1].DescriptorTable.pDescriptorRanges = &descRange[1];//対応するレンジへのポインタ
 	rootParam[1].DescriptorTable.NumDescriptorRanges = 2;
-	rootParam[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;//ピクセルシェーダから参照
+	rootParam[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//ピクセルシェーダから参照
 
 	// ボーン
 	rootParam[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -355,25 +355,20 @@ HRESULT Dx12Wrapper::CreateGraphicsPipelineState()
 
 	//レンダーターゲットブレンド設定用構造体
 	D3D12_RENDER_TARGET_BLEND_DESC renderBlend = {};
-	renderBlend.BlendEnable = TRUE;
-	renderBlend.LogicOpEnable = FALSE;
+	renderBlend.BlendEnable = true;
 	renderBlend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
 	renderBlend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 	renderBlend.BlendOp = D3D12_BLEND_OP_ADD;
 	renderBlend.SrcBlendAlpha = D3D12_BLEND_ONE;
 	renderBlend.DestBlendAlpha = D3D12_BLEND_ZERO;
 	renderBlend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
-	renderBlend.LogicOp = D3D12_LOGIC_OP_NOOP;
 	renderBlend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
 	//ブレンドステート設定用構造体
 	D3D12_BLEND_DESC blend = {};
-	blend.AlphaToCoverageEnable = TRUE;
-	blend.IndependentBlendEnable = FALSE;
-	for (auto &br:blend.RenderTarget) {
-		br = renderBlend;
-	}
-
+	blend.AlphaToCoverageEnable = false;
+	blend.IndependentBlendEnable = false;
+	blend.RenderTarget[0] = renderBlend;
 
 	//その他
 	gpsDesc.BlendState = blend;
@@ -537,7 +532,7 @@ HRESULT Dx12Wrapper::CreateDSV()
 
 	//クリアバリュー
 	D3D12_CLEAR_VALUE _depthClearValue = {};
-	_depthClearValue.DepthStencil.Depth = 1.0f;
+	_depthClearValue.DepthStencil.Depth = 0.0f;
 	_depthClearValue.Format = DXGI_FORMAT_D32_FLOAT;
 
 	result = _dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -666,7 +661,7 @@ void Dx12Wrapper::UpDate()
 		_keyBoadDev->GetDeviceState(sizeof(key), key);
 	}
 
-	float addsize = 0.5f;
+	float addsize = 0.1f;
 
 	if (key[DIK_UP])
 	{
@@ -681,11 +676,11 @@ void Dx12Wrapper::UpDate()
 
 	if (key[DIK_Q]|| key[DIK_LEFT])
 	{
-		angle += 0.05f;
+		angle += 0.01f;
 	}
 	else if (key[DIK_E] || key[DIK_RIGHT])
 	{
-		angle -= 0.05f;
+		angle -= 0.01f;
 	}
 
 	if (key[DIK_W])
@@ -740,7 +735,7 @@ void Dx12Wrapper::UpDate()
 		DirectX::XMLoadFloat3(&target),
 		DirectX::XMLoadFloat3(&up)
 	);
-	pmxModel->UpDate();
+	pmxModel->UpDate(key);
 
 	// 回転するやつ
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
@@ -752,7 +747,7 @@ void Dx12Wrapper::UpDate()
 	
 
 	auto heapStart = _swcDescHeap->GetCPUDescriptorHandleForHeapStart();
-	float clearColor[] = { 0.5f,0.5f,0.5f,0.0f };//クリアカラー設定
+	float clearColor[] = { 0.5f,0.5f,0.5f,1.0f };//クリアカラー設定
 
 	// ビューポート
 	D3D12_VIEWPORT _viewport;

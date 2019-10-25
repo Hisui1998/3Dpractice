@@ -232,7 +232,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 				}
 			}
 		}
-		_boneNames[jbonename] = _bones[i];
+		_boneMap[jbonename] = _bones[i];
 	}
 
 	// もーふ(表情)の読み込み
@@ -334,8 +334,8 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 	result = CreateMaterialBuffer(_dev);
 
+	CreateBoneTree();
 	result= CreateBoneBuffer(_dev);
-
 }
 
 PMXmodel::PMXmodel(ID3D12Device* _dev, const std::string modelPath)
@@ -428,7 +428,7 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 
 	auto result = _dev->CreateDescriptorHeap(&matDescHeap, IID_PPV_ARGS(&_matDescHeap));
 
-	size_t size = (sizeof(PMXMaterial) + 0xff)&~0xff;
+	size_t size = (sizeof(PMXColor) + 0xff)&~0xff;
 
 	_materialsBuff.resize(_materials.size());
 
@@ -470,7 +470,6 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 
 	auto matHandle = _matDescHeap->GetCPUDescriptorHandleForHeapStart();
 	auto addsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
 
 	for (int i = 0; i < _materialsBuff.size(); ++i)
 	{
@@ -551,7 +550,7 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 
 void PMXmodel::CreateBoneTree()
 {
-	_boneMats.resize(512);
+	_boneMats.resize(_bones.size());
 	// 単位行列で初期化
 	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 }
@@ -559,7 +558,7 @@ void PMXmodel::CreateBoneTree()
 HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 {
 	// サイズを調整
-	size_t size = sizeof(DirectX::XMMATRIX)*512;
+	size_t size = sizeof(DirectX::XMMATRIX)*_bones.size();
 	size = (size + 0xff)&~0xff;
 
 	// ボーンバッファの作成
@@ -592,9 +591,89 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 	return result;
 }
 
-void PMXmodel::UpDate()
+void PMXmodel::RotationMatrix(std::string bonename, DirectX::XMFLOAT3 theta)
 {
+	auto boneNode = _boneMap[GetWstringFromString(bonename)];
+	auto vec = DirectX::XMLoadFloat3(&boneNode.pos);// 元の座標を入れておく
 
+	 //原点まで並行移動してそこで回転を行い、元の位置まで戻す
+	_boneMats[boneNode.parentboneIndex] =
+		DirectX::XMMatrixTranslationFromVector(DirectX::XMVectorScale(vec, -1))*/* 原点に移動 */		DirectX::XMMatrixRotationX(theta.x)*									/* ボーン行列の回転(X軸) */		DirectX::XMMatrixRotationY(theta.y)*									/* ボーン行列の回転(Y軸) */		DirectX::XMMatrixRotationZ(theta.z)*									/* ボーン行列の回転(Z軸) */		DirectX::XMMatrixTranslationFromVector(vec);							/* 元の座標に戻す */
+}
+
+void PMXmodel::RecursiveMatrixMultiply(BoneInfo& node, DirectX::XMMATRIX& MultiMat)
+{
+	// 行列を乗算する
+	_boneMats[node.parentboneIndex] *= MultiMat;
+	if (node.boneIndex == 0xffff)
+	{
+		return;
+	}
+	// 再帰する
+	for (int i = 0; i < node.boneIndex;++i) {
+		RecursiveMatrixMultiply(_bones[node.boneIndex], _boneMats[node.parentboneIndex]);
+	}
+}
+
+void PMXmodel::UpDate(char key[256])
+{
+	if (key[DIK_F])
+	{
+		if (_materials[21].Diffuse.w < 1.f)
+		{
+			_materials[21].Diffuse.w += 0.01f;
+		}
+	}
+	else
+	{
+		if (_materials[21].Diffuse.w > 0.f)
+		{
+			_materials[21].Diffuse.w -= 0.01f;
+		}
+	}
+
+	if (key[DIK_T])
+	{
+		if (_materials[22].Diffuse.w < 1.f)
+		{
+			_materials[22].Diffuse.w += 0.01f;
+		}
+	}
+	else
+	{
+		if (_materials[22].Diffuse.w > 0.f)
+		{
+			_materials[22].Diffuse.w -= 0.01f;
+		}
+	}
+
+	
+
+	int midx = 0;
+	for (auto& mbuff : _materialsBuff) {
+
+		auto result = mbuff->Map(0, nullptr, (void**)&MapColor);
+		MapColor->diffuse = _materials[midx].Diffuse;
+
+		MapColor->ambient = _materials[midx].Ambient;
+
+		MapColor->specular.x = _materials[midx].Specular.x;
+		MapColor->specular.y = _materials[midx].Specular.y;
+		MapColor->specular.z = _materials[midx].Specular.z;
+		MapColor->specular.w = _materials[midx].SpecularPow;
+
+		mbuff->Unmap(0, nullptr);
+
+		++midx;
+	}
+	angle = 1.0f;
+	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
+	RotationMatrix("右腕", DirectX::XMFLOAT3(0, angle, 0));
+
+	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
+	RecursiveMatrixMultiply(_boneMap[GetWstringFromString("右肩")], rootmat);
+
+	std::copy(_boneMats.begin(), _boneMats.end(), _mappedBones);
 }
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)

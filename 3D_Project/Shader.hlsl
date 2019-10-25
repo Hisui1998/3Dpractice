@@ -59,7 +59,7 @@ Out vs( float3 pos : POSITION,
     Out o;
     float w = weight / 100.f;
     matrix m = boneMats[boneno.x] * w + boneMats[boneno.y] * (1 - w);
-    //pos = mul(m, float4(pos,1));
+    pos = mul(m, float4(pos,1));
 
     o.pos = mul(world, float4(pos, 1));
     o.svpos = mul(wvp, float4(pos, 1));
@@ -77,7 +77,7 @@ float4 ps(Out o):SV_TARGET
     float3 eye = float3(0, 18, -20);
     float3 ray = o.pos.xyz - eye;
 
-    float3 light = normalize(float3(1, -1, 1)); //光の向かうベクトル(平行光線)
+    float3 light = normalize(float3(-1, -1, 1)); //光の向かうベクトル(平行光線)
 
     //ディフューズ計算
     float diffuseB = saturate(dot(-light, o.normal));
@@ -92,15 +92,15 @@ float4 ps(Out o):SV_TARGET
     sphereMapUV = (sphereMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
     float4 texColor = tex.Sample(smp, o.uv); //テクスチャカラー
+    
 
-    //texColor.a = 0.5f;
+    return saturate(texColor * diffuse * toonDif) 
+                + saturate(specularB * specular);
+    
+    //return texColor;
 
-    //return float4(texColor.rgb,0.505f);
-
-    return texColor;
-
-    //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
-    //        + spa.Sample(smp, sphereMapUV) * texColor 
-    //        + saturate(float4(specularB * specular.rgb, texColor.w))
-    //        + float4(texColor.xyz * ambient * 0.2, texColor.w);
+    return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
+            + spa.Sample(smp, sphereMapUV) * texColor
+            + saturate(specularB * specular)
+            + float4(texColor.rgb * ambient*0, texColor.a);
 }

@@ -542,7 +542,7 @@ HRESULT PMDmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 		MapColor->specular.x = _materials[midx].specular_color.x;
 		MapColor->specular.y = _materials[midx].specular_color.y;
 		MapColor->specular.z = _materials[midx].specular_color.z;
-		MapColor->specular.w = _materials[midx].alpha;
+		MapColor->specular.w = _materials[midx].specularity;
 
 		mbuff->Unmap(0, nullptr);
 		++midx;
@@ -624,6 +624,5 @@ HRESULT PMDmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 		matHandle.ptr += addsize;
 
 	}
-
 	return result;
 }
