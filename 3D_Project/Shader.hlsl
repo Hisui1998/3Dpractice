@@ -68,6 +68,10 @@ struct Out
 // 頂点シェーダ
 Out vs( float3 pos : POSITION,
         float2 uv  : TEXCOORD,
+        float4 adduv1 : TEXCOORD1,
+        float4 adduv2 : TEXCOORD2,
+        float4 adduv3 : TEXCOORD3,
+        float4 adduv4 : TEXCOORD4,
         float3 normal : NORMAL,
         float2 boneno : BONENO,
         min16uint weight : WEIGHT)
