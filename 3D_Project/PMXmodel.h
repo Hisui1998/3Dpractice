@@ -18,10 +18,13 @@ struct PMXHeader {
 // PMXモデル情報
 struct PMXVertexInfo {
 	XMFLOAT3 pos;
-	XMFLOAT3 nomal;
+	XMFLOAT3 normal;
 	XMFLOAT2 uv;
+
 	XMFLOAT4 adduv[4];
+
 	unsigned char weight;
+
 	int boneIdxSize[4];
 	float boneweight[4];
 	XMFLOAT3 SDEFdata[3];
@@ -98,9 +101,12 @@ struct PMXMaterial {
 
 // ボーン情報
 struct BoneInfo {
-	XMFLOAT3 pos;
+	std::wstring name;
+	XMFLOAT3 pos;// 絶対座標
 	int parentboneIndex;// 親のボーンIndex
+
 	int tranceLevel;// 変形階層
+
 	unsigned short bitFlag;// ボーンフラグ(こっから継続データが変化)
 
 	XMFLOAT3 offset;// 座標ｵﾌｾｯﾄ
@@ -131,6 +137,14 @@ struct BoneInfo {
 	}IkData;
 };
 #pragma pack()
+
+// ボーンのノード情報
+struct PMXBoneNode {
+	int boneIdx;
+	XMFLOAT3 startPos;
+	XMFLOAT3 endPos;
+	std::vector<PMXBoneNode*> children;
+};
 
 // 色情報の構造体(正直いらんかもしれん)
 struct PMXColor
@@ -164,13 +178,14 @@ private:
 
 	HRESULT CreateGrayGradationTexture(ID3D12Device* _dev);
 
-	void RotationMatrix(std::string bonename, DirectX::XMFLOAT3 theta);
+	void CreateBoneOrder(PMXBoneNode& node,int level);
 
-	void RecursiveMatrixMultiply(BoneInfo& node, DirectX::XMMATRIX& MultiMat);
+	void RotationMatrix(std::wstring bonename, XMFLOAT3 theta);
+
+	void RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat);
 
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
-	std::map<std::wstring, BoneInfo> _boneMap;// ボーンの名前からボーン情報をとってくる
 
 	std::map<std::wstring, MorphHeader> _morphHeaders;// もーふの名前からもーふのヘッダー情報をとってくる
 	std::map<std::wstring, std::vector<MorphOffsets>> _morphData;// もーふの名前からもーふ情報をとってくる
@@ -193,9 +208,12 @@ private:
 	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
 
 
+	std::vector<int>_orderMoveIdx;// 動かす順番にボーンインデックスを入れる（仮）
 	std::vector<BoneInfo>_bones;
-	std::vector<DirectX::XMMATRIX>_boneMats;
-	DirectX::XMMATRIX* _mappedBones;
+	std::vector<BoneInfo>_boneOrders[4];
+	std::map<std::wstring, PMXBoneNode> _boneMap;//ボーンマップ
+	std::vector<XMMATRIX>_boneMats;// 転送用
+	XMMATRIX* _mappedBones = nullptr;
 
 	float angle = 0;
 

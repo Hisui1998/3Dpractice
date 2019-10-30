@@ -18,7 +18,7 @@ struct PMDVertexInfo
 	float pos[3];//12
 	float normal_vec[3];//12
 	float uv[2];//8
-	unsigned short bone_num[2];//4
+	unsigned short bone_num[2];//4 // ƒ{[ƒ“”Ô† 1A”Ô† 2
 	unsigned char bone_weight;//1
 	unsigned char edge_flag;//1
 };

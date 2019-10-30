@@ -36,7 +36,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 	for (auto& vi : vertexInfo)
 	{
-		fread(&vi, sizeof(vi.pos)+ sizeof(vi.nomal)+ sizeof(vi.uv), 1, fp);
+		fread(&vi, sizeof(vi.pos)+ sizeof(vi.normal)+ sizeof(vi.uv), 1, fp);
 		
 		// 追加UV読み込み
 		for (int i = 0; i < header.data[1]; ++i)
@@ -96,9 +96,9 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	int texNum = 0;
 	fread(&texNum, sizeof(texNum), 1, fp);
 	_texVec.resize(texNum);
-	std::string str;
 	for (int i = 0; i < texNum; ++i)
 	{
+		std::string str;
 		int pathnum = 0;
 		fread(&pathnum, sizeof(int), 1, fp);
 		for (int num = 0;num < pathnum/2;++num)
@@ -108,7 +108,6 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 			str += c;
 		}
 		_texVec[i] = str;
-		str = {};
 	}
 
 	// マテリアル読み込み
@@ -153,7 +152,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 	std::wstring jbonename;
 	std::wstring ebonename;
-	for (int i = 0;i< boneNum;++i)
+	for (int idx = 0;idx< boneNum;++idx)
 	{
 		int jnamenum;
 		fread(&jnamenum, sizeof(jnamenum), 1, fp);
@@ -162,6 +161,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		{
 			fread(&bn, sizeof(bn), 1, fp);
 		}
+		_bones[idx].name = jbonename;
 
 		int enamenum;
 		fread(&enamenum, sizeof(enamenum), 1, fp);
@@ -171,68 +171,67 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 			fread(&bn, sizeof(bn), 1, fp);
 		}
 	
-		fread(&_bones[i].pos, sizeof(_bones[i].pos), 1, fp);
-		fread(&_bones[i].parentboneIndex, header.data[5], 1, fp);
-		fread(&_bones[i].tranceLevel, sizeof(_bones[i].tranceLevel), 1, fp);
-		fread(&_bones[i].bitFlag, sizeof(_bones[i].bitFlag), 1, fp);
+		fread(&_bones[idx].pos, sizeof(_bones[idx].pos), 1, fp);
+		fread(&_bones[idx].parentboneIndex, header.data[5], 1, fp);
+		fread(&_bones[idx].tranceLevel, sizeof(_bones[idx].tranceLevel), 1, fp);
+		fread(&_bones[idx].bitFlag, sizeof(_bones[idx].bitFlag), 1, fp);
 
 		// 接続先
-		if (_bones[i].bitFlag & 0x0001)
+		if (_bones[idx].bitFlag & 0x0001)
 		{
-			fread(&_bones[i].boneIndex, header.data[5], 1, fp);
+			fread(&_bones[idx].boneIndex, header.data[5], 1, fp);
 		}
 		else 
 		{
-			fread(&_bones[i].offset, sizeof(_bones[i].offset), 1, fp);
+			fread(&_bones[idx].offset, sizeof(_bones[idx].offset), 1, fp);
 		}
 
 		// 回転付与 と 移動付与
-		if ((_bones[i].bitFlag & 0x0100) || (_bones[i].bitFlag & 0x0200))
+		if ((_bones[idx].bitFlag & 0x0100) || (_bones[idx].bitFlag & 0x0200))
 		{
-			fread(&_bones[i].grantIndex, header.data[5], 1, fp);
-			fread(&_bones[i].grantPar, sizeof(_bones[i].grantPar), 1, fp);
+			fread(&_bones[idx].grantIndex, header.data[5], 1, fp);
+			fread(&_bones[idx].grantPar, sizeof(_bones[idx].grantPar), 1, fp);
 		}
 
 		// 軸固定
-		if (_bones[i].bitFlag & 0x0400)
+		if (_bones[idx].bitFlag & 0x0400)
 		{
-			fread(&_bones[i].axisvector, sizeof(_bones[i].axisvector), 1, fp);
+			fread(&_bones[idx].axisvector, sizeof(_bones[idx].axisvector), 1, fp);
 		}
 
 		// ローカル軸
-		if (_bones[i].bitFlag & 0x0800)
+		if (_bones[idx].bitFlag & 0x0800)
 		{
-			fread(&_bones[i].axisXvector, sizeof(_bones[i].axisXvector), 1, fp);
-			fread(&_bones[i].axisZvector, sizeof(_bones[i].axisZvector), 1, fp);
+			fread(&_bones[idx].axisXvector, sizeof(_bones[idx].axisXvector), 1, fp);
+			fread(&_bones[idx].axisZvector, sizeof(_bones[idx].axisZvector), 1, fp);
 		}
 
 		// 外部親変形
-		if (_bones[i].bitFlag & 0x2000)
+		if (_bones[idx].bitFlag & 0x2000)
 		{
-			fread(&_bones[i].key, sizeof(_bones[i].key), 1, fp);
+			fread(&_bones[idx].key, sizeof(_bones[idx].key), 1, fp);
 		}
 
 		// IKデータ
-		if (_bones[i].bitFlag & 0x0020)
+		if (_bones[idx].bitFlag & 0x0020)
 		{
-			fread(&_bones[i].IkData.boneIdx, header.data[5], 1, fp);
-			fread(&_bones[i].IkData.loopCnt, sizeof(_bones[i].IkData.loopCnt), 1, fp);
-			fread(&_bones[i].IkData.limrad, sizeof(_bones[i].IkData.limrad), 1, fp);
+			fread(&_bones[idx].IkData.boneIdx, header.data[5], 1, fp);
+			fread(&_bones[idx].IkData.loopCnt, sizeof(_bones[idx].IkData.loopCnt), 1, fp);
+			fread(&_bones[idx].IkData.limrad, sizeof(_bones[idx].IkData.limrad), 1, fp);
 
 			// IKリンク
-			fread(&_bones[i].IkData.linkNum, sizeof(_bones[i].IkData.linkNum), 1, fp);
-			for (int num = 0;num< _bones[i].IkData.linkNum;++num)
+			fread(&_bones[idx].IkData.linkNum, sizeof(_bones[idx].IkData.linkNum), 1, fp);
+			for (int num = 0;num< _bones[idx].IkData.linkNum;++num)
 			{
-				fread(&_bones[i].IkData.linkboneIdx, header.data[5], 1, fp);
-				fread(&_bones[i].IkData.isRadlim, sizeof(_bones[i].IkData.isRadlim), 1, fp);
-				if (_bones[i].IkData.isRadlim)
+				fread(&_bones[idx].IkData.linkboneIdx, header.data[5], 1, fp);
+				fread(&_bones[idx].IkData.isRadlim, sizeof(_bones[idx].IkData.isRadlim), 1, fp);
+				if (_bones[idx].IkData.isRadlim)
 				{
-					fread(&_bones[i].IkData.minRadlim, sizeof(_bones[i].IkData.minRadlim), 1, fp);
-					fread(&_bones[i].IkData.maxRadlim, sizeof(_bones[i].IkData.maxRadlim), 1, fp);
+					fread(&_bones[idx].IkData.minRadlim, sizeof(_bones[idx].IkData.minRadlim), 1, fp);
+					fread(&_bones[idx].IkData.maxRadlim, sizeof(_bones[idx].IkData.maxRadlim), 1, fp);
 				}
 			}
 		}
-		_boneMap[jbonename] = _bones[i];
 	}
 
 	// もーふ(表情)の読み込み
@@ -335,7 +334,9 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	result = CreateMaterialBuffer(_dev);
 
 	CreateBoneTree();
-	result= CreateBoneBuffer(_dev);
+
+	result = CreateBoneBuffer(_dev);
+
 }
 
 PMXmodel::PMXmodel(ID3D12Device* _dev, const std::string modelPath)
@@ -552,7 +553,23 @@ void PMXmodel::CreateBoneTree()
 {
 	_boneMats.resize(_bones.size());
 	// 単位行列で初期化
-	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
+	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
+	
+	for (int idx = 0; idx < _bones.size(); ++idx) {
+		auto& b = _bones[idx];
+		auto& boneNode = _boneMap[b.name];
+		boneNode.boneIdx = idx;
+		if (b.boneIndex!=0xffff)
+		{
+			boneNode.startPos = b.pos;
+			boneNode.endPos = _bones[b.boneIndex].pos;
+		}
+	}	for (auto& b : _boneMap) {
+		if (_bones[b.second.boneIdx].parentboneIndex >= _bones.size())continue;
+		auto parentName = _bones[_bones[b.second.boneIdx].parentboneIndex].name;
+			_boneMap[parentName].children.push_back(&b.second);
+	}
+
 }
 
 HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
@@ -586,32 +603,39 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 	_dev->CreateConstantBufferView(&cbvdesc, handle);
 
 	result = _boneBuffer->Map(0, nullptr, (void**)&_mappedBones);
+
+	_boneMats[_boneMap[L"右腕"].boneIdx] = XMMatrixRotationZ(XM_PIDIV4);
+
 	std::copy(std::begin(_boneMats), std::end(_boneMats), _mappedBones);
 
 	return result;
 }
 
-void PMXmodel::RotationMatrix(std::string bonename, DirectX::XMFLOAT3 theta)
+void PMXmodel::RotationMatrix(std::wstring bonename, XMFLOAT3 theta)
 {
-	auto boneNode = _boneMap[GetWstringFromString(bonename)];
-	auto vec = DirectX::XMLoadFloat3(&boneNode.pos);// 元の座標を入れておく
+	auto boneNode = _boneMap[bonename];
+	if (_bones[boneNode.boneIdx].bitFlag & 0x1000)
+	{
 
-	 //原点まで並行移動してそこで回転を行い、元の位置まで戻す
-	_boneMats[boneNode.parentboneIndex] =
-		DirectX::XMMatrixTranslationFromVector(DirectX::XMVectorScale(vec, -1))*/* 原点に移動 */		DirectX::XMMatrixRotationX(theta.x)*									/* ボーン行列の回転(X軸) */		DirectX::XMMatrixRotationY(theta.y)*									/* ボーン行列の回転(Y軸) */		DirectX::XMMatrixRotationZ(theta.z)*									/* ボーン行列の回転(Z軸) */		DirectX::XMMatrixTranslationFromVector(vec);							/* 元の座標に戻す */
+	}
+	else
+	{
+		auto vec = XMLoadFloat3(&boneNode.startPos);// 元の座標を入れておく
+
+		 //原点まで並行移動してそこで回転を行い、元の位置まで戻す
+		_boneMats[boneNode.boneIdx] =
+			XMMatrixTranslationFromVector(XMVectorScale(vec, -1))*			XMMatrixRotationX(theta.x)*				XMMatrixRotationY(theta.y)*				XMMatrixRotationZ(theta.z)*				XMMatrixTranslationFromVector(vec);
+	}
 }
 
-void PMXmodel::RecursiveMatrixMultiply(BoneInfo& node, DirectX::XMMATRIX& MultiMat)
+void PMXmodel::RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat)
 {
 	// 行列を乗算する
-	_boneMats[node.parentboneIndex] *= MultiMat;
-	if (node.boneIndex == 0xffff)
-	{
-		return;
-	}
+	_boneMats[node.boneIdx] *= MultiMat;
+
 	// 再帰する
-	for (int i = 0; i < node.boneIndex;++i) {
-		RecursiveMatrixMultiply(_bones[node.boneIndex], _boneMats[node.parentboneIndex]);
+	for (auto& child : node.children) {
+		RecursiveMatrixMultiply(*child, _boneMats[node.boneIdx]);
 	}
 }
 
@@ -647,8 +671,12 @@ void PMXmodel::UpDate(char key[256])
 		}
 	}
 
-	
+	if (key[DIK_H])
+	{
+		angle += 0.01f;
+	}
 
+	// マテリアルカラーの転送
 	int midx = 0;
 	for (auto& mbuff : _materialsBuff) {
 
@@ -666,12 +694,12 @@ void PMXmodel::UpDate(char key[256])
 
 		++midx;
 	}
-	angle = 1.0f;
-	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
-	RotationMatrix("右腕", DirectX::XMFLOAT3(0, angle, 0));
+	
 
-	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
-	RecursiveMatrixMultiply(_boneMap[GetWstringFromString("右肩")], rootmat);
+	// ボーん
+	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
+
+	//_boneMats[_boneMap[L"センター"].boneIdx] = XMMatrixRotationZ(XM_PIDIV4);
 
 	std::copy(_boneMats.begin(), _boneMats.end(), _mappedBones);
 }
@@ -679,12 +707,12 @@ void PMXmodel::UpDate(char key[256])
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)
 {
 	//WICテクスチャのロード
-	DirectX::TexMetadata metadata = {};
-	DirectX::ScratchImage scratchImg = {};
+	TexMetadata metadata = {};
+	ScratchImage scratchImg = {};
 
 	// テクスチャファイルのロード
 	auto result = LoadFromWICFile(GetWstringFromString(texPath).c_str(),
-		DirectX::WIC_FLAGS_NONE,
+		WIC_FLAGS_NONE,
 		&metadata,
 		scratchImg);
 	if (FAILED(result)) {
@@ -808,4 +836,12 @@ HRESULT PMXmodel::CreateGrayGradationTexture(ID3D12Device* _dev)
 		sizeof(unsigned int)*data.size());
 
 	return result;
+}
+
+void PMXmodel::CreateBoneOrder(PMXBoneNode& node,int level)
+{
+	if (_bones[node.boneIdx].tranceLevel == level)
+	{
+		_orderMoveIdx.emplace_back(_bones[node.boneIdx].boneIndex);
+	}
 }

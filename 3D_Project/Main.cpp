@@ -15,9 +15,9 @@ int main()
 	}
 	else std::cout << "初期化完了" << std::endl;
 
-	std::cout << "UP,DOWN:モデルの上下移動" << std::endl;
-	std::cout << "Q,LEFT,E,RIGHT:モデルのY軸回転" << std::endl;
-	std::cout << "WASD:モデルの平面移動" << std::endl;
+	std::cout << "UP,DOWN:カメラの上下移動" << std::endl;
+	std::cout << "Q,LEFT,E,RIGHT:カメラのY軸回転" << std::endl;
+	std::cout << "WASD:カメラの平面移動" << std::endl;
 	app.Run();
 
 	app.End();
