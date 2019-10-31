@@ -25,8 +25,9 @@ struct PMXVertexInfo {
 
 	unsigned char weight;
 
-	int boneIdxSize[4];
-	float boneweight[4];
+	XMINT4 boneIdx;
+	XMFLOAT4 boneweight;
+
 	XMFLOAT3 SDEFdata[3];
 	float edge;
 };

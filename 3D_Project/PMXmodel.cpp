@@ -50,30 +50,31 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		// 変形形式別の読み込み
 		if (vi.weight == 0)
 		{
-			fread(&vi.boneIdxSize[0],header.data[5], 1, fp);
+			fread(&vi.boneIdx.x,header.data[5], 1, fp);
+			vi.boneweight.x = 1.0f;
 		}
 		else if (vi.weight == 1)
 		{
-			fread(&vi.boneIdxSize[0], header.data[5], 1, fp);
-			fread(&vi.boneIdxSize[1], header.data[5], 1, fp);
-			fread(&vi.boneweight[0], sizeof(float), 1, fp);
+			fread(&vi.boneIdx.x, header.data[5], 1, fp);
+			fread(&vi.boneIdx.y, header.data[5], 1, fp);
+			fread(&vi.boneweight.x, sizeof(float), 1, fp);
 		}
 		else if (vi.weight == 2)
 		{
-			fread(&vi.boneIdxSize[0], header.data[5], 1, fp);
-			fread(&vi.boneIdxSize[1], header.data[5], 1, fp);
-			fread(&vi.boneIdxSize[2], header.data[5], 1, fp);
-			fread(&vi.boneIdxSize[3], header.data[5], 1, fp);
-			fread(&vi.boneweight[0], sizeof(float), 1, fp);
-			fread(&vi.boneweight[1], sizeof(float), 1, fp);
-			fread(&vi.boneweight[2], sizeof(float), 1, fp);
-			fread(&vi.boneweight[3], sizeof(float), 1, fp);
+			fread(&vi.boneIdx.x, header.data[5], 1, fp);
+			fread(&vi.boneIdx.y, header.data[5], 1, fp);
+			fread(&vi.boneIdx.z, header.data[5], 1, fp);
+			fread(&vi.boneIdx.w, header.data[5], 1, fp);
+			fread(&vi.boneweight.x, sizeof(float), 1, fp);
+			fread(&vi.boneweight.y, sizeof(float), 1, fp);
+			fread(&vi.boneweight.z, sizeof(float), 1, fp);
+			fread(&vi.boneweight.w, sizeof(float), 1, fp);
 		}
 		else if (vi.weight == 3)
 		{
-			fread(&vi.boneIdxSize[0], header.data[5], 1, fp);
-			fread(&vi.boneIdxSize[1], header.data[5], 1, fp);
-			fread(&vi.boneweight[0], sizeof(float), 1, fp);
+			fread(&vi.boneIdx.x, header.data[5], 1, fp);
+			fread(&vi.boneIdx.y, header.data[5], 1, fp);
+			fread(&vi.boneweight.x, sizeof(float), 1, fp);
 			fread(&vi.SDEFdata[0], sizeof(vi.SDEFdata[0]), 1, fp);
 			fread(&vi.SDEFdata[1], sizeof(vi.SDEFdata[1]), 1, fp);
 			fread(&vi.SDEFdata[2], sizeof(vi.SDEFdata[2]), 1, fp);
@@ -604,7 +605,11 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 
 	result = _boneBuffer->Map(0, nullptr, (void**)&_mappedBones);
 
-	_boneMats[_boneMap[L"右腕"].boneIdx] = XMMatrixRotationZ(XM_PIDIV4);
+	for(auto& bm: _boneMats)
+	{
+		bm = XMMatrixRotationZ(XM_PIDIV4);
+	}
+
 
 	std::copy(std::begin(_boneMats), std::end(_boneMats), _mappedBones);
 
@@ -674,6 +679,17 @@ void PMXmodel::UpDate(char key[256])
 	if (key[DIK_H])
 	{
 		angle += 0.01f;
+	}
+
+	if (key[DIK_M])
+	{
+		auto checkinfo = vertexInfo;
+		for (auto morph : _morphData[L"じと目"])
+		{
+			vertexInfo[morph.vertexMorph.verIdx].pos.x += morph.vertexMorph.pos.x / 10;
+			vertexInfo[morph.vertexMorph.verIdx].pos.y += morph.vertexMorph.pos.y / 10;
+			vertexInfo[morph.vertexMorph.verIdx].pos.z += morph.vertexMorph.pos.z / 10;
+		}
 	}
 
 	// マテリアルカラーの転送

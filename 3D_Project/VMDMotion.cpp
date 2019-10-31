@@ -2,7 +2,7 @@
 
 
 
-VMDMotion::VMDMotion()
+VMDMotion::VMDMotion(std::string fileName)
 {
 }
 
