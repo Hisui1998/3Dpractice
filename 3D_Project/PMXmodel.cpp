@@ -325,8 +325,12 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		}
 	}
 
+	auto result = CreateVertexBuffer(_dev);
+
+	result = CreateIndexBuffer(_dev);
+
 	// しろてくすちゃつくる
-	auto result = CreateWhiteTexture(_dev);
+	result = CreateWhiteTexture(_dev);
 	// くろてくすちゃつくる
 	result = CreateBlackTexture(_dev);
 	// グラデーションテクスチャつくる
@@ -340,9 +344,24 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 }
 
-PMXmodel::PMXmodel(ID3D12Device* _dev, const std::string modelPath)
+void PMXmodel::BufferUpDate()
 {
-	LoadModel(_dev, modelPath);
+	// 頂点バッファの更新
+	PMXVertexInfo* vertMap = nullptr;
+	auto result = _vertexBuffer->Map(0, nullptr, (void**)&vertMap);
+	std::copy(vertexInfo.begin(), vertexInfo.end(), vertMap);
+	_vertexBuffer->Unmap(0, nullptr);
+
+	// インデックスバッファのマッピング
+	unsigned short* idxMap = nullptr;
+	result = _indexBuffer->Map(0, nullptr, (void**)&idxMap);
+	std::copy(std::begin(_verindex), std::end(_verindex), idxMap);
+	_indexBuffer->Unmap(0, nullptr);
+}
+
+PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath)
+{
+	LoadModel(dev,modelPath);
 }
 
 
@@ -414,6 +433,66 @@ HRESULT PMXmodel::CreateBlackTexture(ID3D12Device* _dev)
 	);
 
 	result = blackTex->WriteToSubresource(0, nullptr, data.data(), 4 * 4, data.size());
+
+	return result;
+}
+
+HRESULT PMXmodel::CreateVertexBuffer(ID3D12Device * _dev)
+{
+	// ヒープの情報設定
+	D3D12_HEAP_PROPERTIES heapprop = {};
+	heapprop.Type = D3D12_HEAP_TYPE_UPLOAD;//CPUからGPUへ転送する用
+	heapprop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	heapprop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+	// create
+	auto result = _dev->CreateCommittedResource(
+		&heapprop,
+		D3D12_HEAP_FLAG_NONE,//特別な指定なし
+		&CD3DX12_RESOURCE_DESC::Buffer(vertexInfo.size() * sizeof(PMXVertexInfo)),
+		D3D12_RESOURCE_STATE_GENERIC_READ,//よみこみ
+		nullptr,//nullptrでいい
+		IID_PPV_ARGS(&_vertexBuffer));//いつもの
+
+	// 頂点バッファのマッピング
+	PMXVertexInfo* vertMap = nullptr;
+	result = _vertexBuffer->Map(0, nullptr, (void**)&vertMap);
+	std::copy(vertexInfo.begin(), vertexInfo.end(), vertMap);
+	_vertexBuffer->Unmap(0, nullptr);
+
+	_vbView.BufferLocation = _vertexBuffer->GetGPUVirtualAddress();
+	_vbView.StrideInBytes = sizeof(PMXVertexInfo);
+	_vbView.SizeInBytes = vertexInfo.size() * sizeof(PMXVertexInfo);
+
+	return result;
+}
+
+HRESULT PMXmodel::CreateIndexBuffer(ID3D12Device * _dev)
+{
+	// ヒープの情報設定
+	D3D12_HEAP_PROPERTIES heapprop = {};
+	heapprop.Type = D3D12_HEAP_TYPE_UPLOAD;//CPUからGPUへ転送する用
+	heapprop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	heapprop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+	auto result = _dev->CreateCommittedResource(
+		&heapprop,
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(_verindex.size() * sizeof(_verindex[0])),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&_indexBuffer));
+
+	// インデックスバッファのマッピング
+	unsigned short* idxMap = nullptr;
+	result = _indexBuffer->Map(0, nullptr, (void**)&idxMap);
+	std::copy(std::begin(_verindex), std::end(_verindex), idxMap);
+
+	_indexBuffer->Unmap(0, nullptr);
+
+	_idxView.BufferLocation = _indexBuffer->GetGPUVirtualAddress();//バッファの場所
+	_idxView.Format = DXGI_FORMAT_R16_UINT;//フォーマット(shortだからR16)
+	_idxView.SizeInBytes = _verindex.size() * sizeof(_verindex[0]);//総サイズ
 
 	return result;
 }
@@ -619,18 +698,11 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 void PMXmodel::RotationMatrix(std::wstring bonename, XMFLOAT3 theta)
 {
 	auto boneNode = _boneMap[bonename];
-	if (_bones[boneNode.boneIdx].bitFlag & 0x1000)
-	{
+	auto start = XMLoadFloat3(&boneNode.startPos);// 元の座標を入れておく
 
-	}
-	else
-	{
-		auto vec = XMLoadFloat3(&boneNode.startPos);// 元の座標を入れておく
-
-		 //原点まで並行移動してそこで回転を行い、元の位置まで戻す
-		_boneMats[boneNode.boneIdx] =
-			XMMatrixTranslationFromVector(XMVectorScale(vec, -1))*			XMMatrixRotationX(theta.x)*				XMMatrixRotationY(theta.y)*				XMMatrixRotationZ(theta.z)*				XMMatrixTranslationFromVector(vec);
-	}
+	//原点まで並行移動してそこで回転を行い、元の位置まで戻す
+	_boneMats[boneNode.boneIdx] =
+		XMMatrixTranslationFromVector(XMVectorScale(start, -1))*		XMMatrixRotationX(theta.x)*		XMMatrixRotationY(theta.y)*		XMMatrixRotationZ(theta.z)*		XMMatrixTranslationFromVector(start);
 }
 
 void PMXmodel::RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat)
@@ -691,6 +763,10 @@ void PMXmodel::UpDate(char key[256])
 			vertexInfo[morph.vertexMorph.verIdx].pos.z += morph.vertexMorph.pos.z / 10;
 		}
 	}
+	if (key[DIK_H])
+	{
+		angle += 0.01f;
+	}
 
 	// マテリアルカラーの転送
 	int midx = 0;
@@ -715,9 +791,15 @@ void PMXmodel::UpDate(char key[256])
 	// ボーん
 	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
 
-	//_boneMats[_boneMap[L"センター"].boneIdx] = XMMatrixRotationZ(XM_PIDIV4);
+	RotationMatrix(L"右肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix(L"左肩", DirectX::XMFLOAT3(angle, 0, 0));
+
+	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
+	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
 
 	std::copy(_boneMats.begin(), _boneMats.end(), _mappedBones);
+
+	// バッファの更新
+	BufferUpDate();
 }
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)

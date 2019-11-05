@@ -21,7 +21,7 @@ struct PMXVertexInfo {
 	XMFLOAT3 normal;
 	XMFLOAT2 uv;
 
-	XMFLOAT4 adduv[4];
+	XMFLOAT2 adduv[4];
 
 	unsigned char weight;
 
@@ -161,6 +161,9 @@ class PMXmodel
 private:
 	void LoadModel(ID3D12Device* _dev, const std::string modelPath);
 
+	void BufferUpDate();
+
+
 	void CreateBoneTree();
 
 	// 白テクスチャの作成
@@ -168,6 +171,10 @@ private:
 
 	// 黒テクスチャの作成
 	HRESULT CreateBlackTexture(ID3D12Device* _dev);
+	
+	HRESULT CreateVertexBuffer(ID3D12Device* _dev);
+
+	HRESULT CreateIndexBuffer(ID3D12Device* _dev);
 
 	HRESULT CreateMaterialBuffer(ID3D12Device* _dev);
 
@@ -196,10 +203,19 @@ private:
 	std::vector<std::string>_texVec;
 	std::vector<PMXMaterial> _materials;
 
+	// 頂点バッファ
+	ID3D12Resource* _vertexBuffer = nullptr;
+	D3D12_VERTEX_BUFFER_VIEW _vbView = {};// 頂点バッファビュー
+
+	// インデックスバッファ
+	ID3D12Resource* _indexBuffer = nullptr;
+	D3D12_INDEX_BUFFER_VIEW _idxView = {};// インデックスバッファビュー
+
 	// 白黒テクスチャ
 	ID3D12Resource* whiteTex = nullptr;
 	ID3D12Resource* blackTex = nullptr;
 	ID3D12Resource* gradTex = nullptr;
+
 
 	ID3D12Resource* _boneBuffer;// ボーンバッファ
 	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ
@@ -223,8 +239,9 @@ private:
 
 	PMXColor* MapColor = nullptr;
 	std::string FolderPath;
+
 public:
-	PMXmodel(ID3D12Device* _dev, const std::string modelPath);
+	PMXmodel(ID3D12Device* dev, const std::string modelPath);
 	~PMXmodel();
 
 	void UpDate(char key[256]);
@@ -234,9 +251,10 @@ public:
 	std::vector<unsigned int> GetVertexIndex() {
 		return _verindex;
 	};
-	std::vector<PMXVertexInfo> GetVertexInfo() {
-		return vertexInfo;
-	};
+
+
+	D3D12_VERTEX_BUFFER_VIEW GetVertexView() { return _vbView; };
+	D3D12_INDEX_BUFFER_VIEW GetIndexView() { return _idxView; };
 
 	ID3D12DescriptorHeap*& GetBoneHeap() { return _boneHeap; };
 	ID3D12DescriptorHeap*& GetMaterialHeap() { return _matDescHeap; };

@@ -36,9 +36,6 @@ private:
 	LPDIRECTINPUT8       _directInput;// DirectInput本体
 	LPDIRECTINPUTDEVICE8 _keyBoadDev;// キーボードデバイス
 
-	D3D12_VERTEX_BUFFER_VIEW _vbView = {};
-	D3D12_INDEX_BUFFER_VIEW _ibView = {};
-
 	ID3D12Fence* _fence = nullptr;
 	UINT64 _fenceValue = 0;
 
@@ -51,8 +48,6 @@ private:
 
 	std::vector<ID3D12Resource*>renderTargets;
 
-	ID3D12Resource* _vertexBuffer = nullptr;// 頂点バッファ
-	ID3D12Resource* _indexBuffer = nullptr;// インデックスバッファ
 	ID3D12Resource* _constBuff = nullptr;// 定数バッファ
 	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
 
@@ -83,9 +78,6 @@ private:
 
 	// パイプラインを作る関数(頂点レイアウトの設定はこの中)
 	HRESULT CreateGraphicsPipelineState();
-
-	// インデックスバッファと頂点バッファの作成
-	HRESULT CreateBuffersForIndexAndVertex();
 
 	// 深度バッファと深度バッファビューを作る関数
 	HRESULT CreateDSV();

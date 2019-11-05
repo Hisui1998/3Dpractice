@@ -285,17 +285,14 @@ HRESULT Dx12Wrapper::CreateGraphicsPipelineState()
 		// UV
 		{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// 追加UV
-		{"TEXCOORD",1,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"TEXCOORD",2,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"TEXCOORD",3,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"TEXCOORD",4,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"ADDUV",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"ADDUV",1,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"ADDUV",2,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"ADDUV",3,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// wighttype
 		{"WEIGHTTYPE",0,DXGI_FORMAT_R8_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT ,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// ボーンインデックス
-		{"BONENO",0,DXGI_FORMAT_R32G32B32A32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"BONENO",1,DXGI_FORMAT_R32G32B32A32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"BONENO",2,DXGI_FORMAT_R32G32B32A32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"BONENO",3,DXGI_FORMAT_R32G32B32A32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"BONENO",0,DXGI_FORMAT_R8G8B8A8_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// weight
 		{"WEIGHT",0,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		{"WEIGHT",1,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
@@ -360,57 +357,6 @@ HRESULT Dx12Wrapper::CreateGraphicsPipelineState()
 	return result;
 }
 
-HRESULT Dx12Wrapper::CreateBuffersForIndexAndVertex()
-{
-	// ヒープの情報設定
-	D3D12_HEAP_PROPERTIES heapprop = {};
-	heapprop.Type = D3D12_HEAP_TYPE_UPLOAD;//CPUからGPUへ転送する用
-	heapprop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	heapprop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-
-	auto vertexinfo = pmxModel->GetVertexInfo();
-	auto vertexindex = pmxModel->GetVertexIndex();
-
-	// create
-	auto result = _dev->CreateCommittedResource(
-		&heapprop,
-		D3D12_HEAP_FLAG_NONE,//特別な指定なし
-		&CD3DX12_RESOURCE_DESC::Buffer(vertexinfo.size() * sizeof(vertexinfo[0])),
-		D3D12_RESOURCE_STATE_GENERIC_READ,//よみこみ
-		nullptr,//nullptrでいい
-		IID_PPV_ARGS(&_vertexBuffer));//いつもの
-
-	result = _dev->CreateCommittedResource(
-		&heapprop,
-		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(vertexindex.size() * sizeof(vertexindex[0])),
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		IID_PPV_ARGS(&_indexBuffer));
-	
-	// 頂点バッファのマッピング
-	PMXVertexInfo* vertMap = nullptr;
-	result = _vertexBuffer->Map(0, nullptr, (void**)&vertMap);
-	std::copy(vertexinfo.begin(), vertexinfo.end(), vertMap);
-
-	_vertexBuffer->Unmap(0, nullptr);
-
-	_vbView.BufferLocation = _vertexBuffer->GetGPUVirtualAddress();
-	_vbView.StrideInBytes = sizeof(PMXVertexInfo);
-	_vbView.SizeInBytes = pmxModel->GetVertexInfo().size()* sizeof(PMXVertexInfo);
-
-	// インデックスバッファのマッピング
-	unsigned short* idxMap = nullptr;
-	result = _indexBuffer->Map(0, nullptr, (void**)&idxMap);
-	std::copy(std::begin(vertexindex), std::end(vertexindex), idxMap);
-	_indexBuffer->Unmap(0, nullptr);
-
-	_ibView.BufferLocation = _indexBuffer->GetGPUVirtualAddress();//バッファの場所
-	_ibView.Format = DXGI_FORMAT_R16_UINT;//フォーマット(shortだからR16)
-	_ibView.SizeInBytes = vertexindex.size() * sizeof(vertexindex[0]);//総サイズ
-
-	return result;
-}
 
 HRESULT Dx12Wrapper::CreateConstantBuffer()
 {
@@ -432,7 +378,7 @@ HRESULT Dx12Wrapper::CreateConstantBuffer()
 	auto wsize = Application::Instance().GetWindowSize();
 
 	// 座標の初期値
-	eye = XMFLOAT3(0,10,-5);
+	eye = XMFLOAT3(0,10,-15);
 	target = XMFLOAT3(0, 10,0);
 	up = XMFLOAT3(0,1,0);
 
@@ -552,6 +498,7 @@ Dx12Wrapper::Dx12Wrapper(HWND hwnd):_hwnd(hwnd)
 
 Dx12Wrapper::~Dx12Wrapper()
 {
+	// キーボードデバイスの解放
 	_keyBoadDev->Unacquire();
 
 	if (_keyBoadDev != NULL)
@@ -588,33 +535,25 @@ int Dx12Wrapper::Init()
 	if (FAILED(CreateFence())) 
 		return 4;
 
-	// PMDのロード
-	/*if (FAILED(LoadPMD())) 
-		return 5;*/
-
-	// インデックスと頂点バッファの作成
-	if (FAILED(CreateBuffersForIndexAndVertex())) 
-		return 6;
-
 	// シェーダーの初期化
 	if (FAILED(LoadShader()))
-		return 7;
+		return 5;
 
 	// シグネチャの初期化
 	if (FAILED(CreateRootSignature())) 
-		return 8;
+		return 6;
 
 	// パイプラインの作成
 	if (FAILED(CreateGraphicsPipelineState()))
-		return 9;
+		return 7;
 
 	// 深度バッファの作成
 	if (FAILED(CreateDSV())) 
-		return 10;
+		return 8;
 
 	// 定数バッファの作成
 	if (FAILED(CreateConstantBuffer())) 
-		return 11;
+		return 9;
 
 	return 0;
 }
@@ -685,8 +624,8 @@ void Dx12Wrapper::UpDate()
 
 	if (key[DIK_R])
 	{
-		eye = XMFLOAT3(0, 10.5f, -5);
-		target = XMFLOAT3(0, 10.5f, 0);
+		eye = XMFLOAT3(0, 10, -15);
+		target = XMFLOAT3(0, 10, 0);
 		up = XMFLOAT3(0, 1, 0);
 
 		angle = 0.f;
@@ -707,7 +646,6 @@ void Dx12Wrapper::UpDate()
 		);
 	}
 
-	// 上半身
 	_wvp.view = DirectX::XMMatrixLookAtLH(
 		DirectX::XMLoadFloat3(&eye),
 		DirectX::XMLoadFloat3(&target),
@@ -724,7 +662,7 @@ void Dx12Wrapper::UpDate()
 	*_wvpMP = _wvp;
 
 	auto heapStart = _swcDescHeap->GetCPUDescriptorHandleForHeapStart();
-	float clearColor[] = { 0.5f,0.5f,0.5f,1.0f };//クリアカラー設定
+	float clearColor[] = { 0.5f,0.5f,0.5f,0.0f };//クリアカラー設定
 
 	// ビューポート
 	D3D12_VIEWPORT _viewport;
@@ -789,10 +727,10 @@ void Dx12Wrapper::UpDate()
 	_cmdList->ClearDepthStencilView(_dsvDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
 	// インデックス情報のセット
-	_cmdList->IASetIndexBuffer(&_ibView);
+	_cmdList->IASetIndexBuffer(&pmxModel->GetIndexView());
 
 	// 頂点バッファビューの設定
-	_cmdList->IASetVertexBuffers(0, 1, &_vbView);
+	_cmdList->IASetVertexBuffers(0, 1, &pmxModel->GetVertexView());
 
 	// トポロジーのセット
 	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

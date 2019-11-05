@@ -47,87 +47,75 @@ struct Out
     float3 normal   : NORMAL0;
     float3 vnormal  : NORMAL1;
 
-    float4 adduv1 : TEXCOORD1;
-    float4 adduv2 : TEXCOORD2;
-    float4 adduv3 : TEXCOORD3;
-    float4 adduv4 : TEXCOORD4;
+	float2 adduv1 : ADDUV0;
+	float2 adduv2 : ADDUV1;
+	float2 adduv3 : ADDUV2;
+	float2 adduv4 : ADDUV3;
 
-    uint weighttype : WEIGHTTYPE;
+    min16uint weighttype : WEIGHTTYPE;
 
-    int boneno1 : BONENO;
-    int boneno2 : BONENO1;
-    int boneno3 : BONENO2;
-    int boneno4 : BONENO3;
+	min16uint4 boneno : BONENO0;
 
-    float weight1 : WEIGHT;
-    float weight2 : WEIGHT1;
-    float weight3 : WEIGHT2;
-    float weight4 : WEIGHT3;
+	min16float weight1 : WEIGHT0;
+	min16float weight2 : WEIGHT1;
+	min16float weight3 : WEIGHT2;
+	min16float weight4 : WEIGHT3;
 };
 
 // 頂点シェーダ
-Out vs(float3 pos : POSITION,
-        float3 normal : NORMAL,
-        float2 uv  : TEXCOORD,
+Out vs(
+	float3 pos : POSITION,
+    float3 normal : NORMAL,
+    float2 uv  : TEXCOORD,
 
-        float4 adduv1 : TEXCOORD1,
-        float4 adduv2 : TEXCOORD2,
-        float4 adduv3 : TEXCOORD3,
-        float4 adduv4 : TEXCOORD4,
+	float2 adduv1 : ADDUV0,
+	float2 adduv2 : ADDUV1,
+	float2 adduv3 : ADDUV2,
+	float2 adduv4 : ADDUV3,
 
-        uint weighttype : WEIGHTTYPE,
+	min16uint weighttype : WEIGHTTYPE,
 
-        int boneno1 : BONENO,
-        int boneno2 : BONENO1,
-        int boneno3 : BONENO2,
-        int boneno4 : BONENO3,
+	min16uint4 boneno: BONENO,
 
-        float weight1 : WEIGHT,
-        float weight2 : WEIGHT1,
-        float weight3 : WEIGHT2,
-        float weight4 : WEIGHT3)
+	min16float weight1 : WEIGHT0,
+	min16float weight2 : WEIGHT1,
+	min16float weight3 : WEIGHT2,
+	min16float weight4 : WEIGHT3
+)
+/*頂点シェーダ*/
 {
     Out o;
-
-    if (weighttype == 0)
+	matrix m = boneMats[boneno.x] * 1.0f;// ウェイト1.0の固定値
+	
+    if (weighttype == 1)
     {
-        pos = mul(boneMats[boneno1], float4(pos, 1));
-    }
-    else if (weighttype == 1)
-    {
-        matrix m = boneMats[boneno1] * weight1 + boneMats[boneno2] * (1.0f - weight1);
-        pos = mul(m, float4(pos, 1));
+		m = boneMats[boneno.x] * weight1 + boneMats[boneno.y] * (1.0f - weight1);
     }
     else if (weighttype == 2)
     {
-        matrix m = boneMats[boneno1] * weight1 + boneMats[boneno2] * weight2 + boneMats[boneno3] * weight3 + boneMats[boneno4] * weight4;
-        pos = mul(m, float4(pos, 1));
+        m = boneMats[boneno.x] * weight1 + boneMats[boneno.y] * weight2 + boneMats[boneno.z] * weight3 + boneMats[boneno.w] * weight4;
     }
-    else if (weighttype == 3)
-    {
-        matrix m = boneMats[boneno1] * weight1 + boneMats[boneno2] * (1.0f - weight1);
-        pos = mul(m, float4(pos, 1));
-    }
+	else if (weighttype == 3)
+	{
+		m = boneMats[boneno.x] * weight1 + boneMats[boneno.y] * (1.0f - weight1);
+	}
 
 
+	pos = mul(m, float4(pos, 1));
     o.pos = mul(world, float4(pos, 1));
     o.svpos = mul(wvp, float4(pos, 1));
     o.uv = uv;
     o.normal = mul(world, float4(normal, 1));
     o.vnormal = mul(view, float4(o.normal, 1));
 
-    o.boneno1 = boneno1;
-    o.boneno2 = boneno2;
-    o.boneno3 = boneno3;
-    o.boneno4 = boneno4;
+	o.weighttype = weighttype;
+
+    o.boneno = boneno;
 
     o.weight1 = weight1;
     o.weight2 = weight2;
     o.weight3 = weight3;
     o.weight4 = weight4;
-
-    // ﾃﾞﾊﾞｯｸﾞ用
-    // o.weight = weight;
 
 	return o;
 }
@@ -135,6 +123,7 @@ Out vs(float3 pos : POSITION,
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
 {
+	//return float4(o.weight1,o.weight2,0.0,1);
     // 視線ベクトル
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;
@@ -155,8 +144,8 @@ float4 ps(Out o):SV_TARGET
 
     float4 texColor = tex.Sample(smp, o.uv); //テクスチャカラー
 
-    return saturate(texColor * diffuse * toonDif);
-                    +specularB;
+	return saturate(texColor * diffuse * toonDif);
+                    + saturate(specularB*specular);
 
     return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
             + spa.Sample(smp, sphereMapUV) * texColor
