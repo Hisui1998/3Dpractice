@@ -33,7 +33,7 @@ struct PMDMaterial {
 	unsigned char toon_index;// 1
 	unsigned char edge_flag;// 1
 	// ここで２バイトあまる
-	unsigned int indexNum;// 4
+	unsigned int faceVerCnt;// 4
 	char texFileName[20];//20
 };
 
@@ -71,6 +71,12 @@ class PMDmodel
 private:
 	/* プライベート関数 */
 	void LoadModel(ID3D12Device* _dev,const std::string modelPath);
+	
+	// 頂点バッファの作成
+	HRESULT CreateVertexBuffer(ID3D12Device* _dev);
+
+	// インデックスバッファの作成
+	HRESULT CreateIndexBuffer(ID3D12Device* _dev);
 
 	// 拡張子を取得する関数
 	std::string GetExtension(const std::string& path);
@@ -139,6 +145,14 @@ private:
 	ID3D12Resource* whiteTex = nullptr;
 	ID3D12Resource* blackTex = nullptr;
 	ID3D12Resource* gradTex = nullptr;
+	
+	// 頂点バッファ
+	ID3D12Resource* _vertexBuffer = nullptr;
+	D3D12_VERTEX_BUFFER_VIEW _vbView = {};// 頂点バッファビュー
+
+	// インデックスバッファ
+	ID3D12Resource* _indexBuffer = nullptr;
+	D3D12_INDEX_BUFFER_VIEW _idxView = {};// インデックスバッファビュー
 
 	PMDColor* MapColor = nullptr;
 	float angle;
@@ -147,8 +161,12 @@ public:
 	~PMDmodel();
 	void UpDate();
 	std::vector<PMDMaterial> GetMaterials();
-	std::vector<unsigned short> GetVertexIndex();
-	std::vector<PMDVertexInfo> GetVertexInfo();
+
+	const std::vector<D3D12_INPUT_ELEMENT_DESC> GetInputLayout();
+
+	D3D12_VERTEX_BUFFER_VIEW GetVertexView() { return _vbView; };
+	D3D12_INDEX_BUFFER_VIEW GetIndexView() { return _idxView; };
+	const LPCWSTR GetUseShader();
 
 	ID3D12DescriptorHeap*& GetBoneHeap();
 	ID3D12DescriptorHeap*& GetMaterialHeap();

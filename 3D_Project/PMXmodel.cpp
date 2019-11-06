@@ -50,31 +50,30 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		// 変形形式別の読み込み
 		if (vi.weight == 0)
 		{
-			fread(&vi.boneIdx.x,header.data[5], 1, fp);
-			vi.boneweight.x = 1.0f;
+			fread(&vi.boneIdx[0],header.data[5], 1, fp);
 		}
 		else if (vi.weight == 1)
 		{
-			fread(&vi.boneIdx.x, header.data[5], 1, fp);
-			fread(&vi.boneIdx.y, header.data[5], 1, fp);
-			fread(&vi.boneweight.x, sizeof(float), 1, fp);
+			fread(&vi.boneIdx[0], header.data[5], 1, fp);
+			fread(&vi.boneIdx[1], header.data[5], 1, fp);
+			fread(&vi.boneweight[0], sizeof(float), 1, fp);
 		}
 		else if (vi.weight == 2)
 		{
-			fread(&vi.boneIdx.x, header.data[5], 1, fp);
-			fread(&vi.boneIdx.y, header.data[5], 1, fp);
-			fread(&vi.boneIdx.z, header.data[5], 1, fp);
-			fread(&vi.boneIdx.w, header.data[5], 1, fp);
-			fread(&vi.boneweight.x, sizeof(float), 1, fp);
-			fread(&vi.boneweight.y, sizeof(float), 1, fp);
-			fread(&vi.boneweight.z, sizeof(float), 1, fp);
-			fread(&vi.boneweight.w, sizeof(float), 1, fp);
+			fread(&vi.boneIdx[0], header.data[5], 1, fp);
+			fread(&vi.boneIdx[1], header.data[5], 1, fp);
+			fread(&vi.boneIdx[2], header.data[5], 1, fp);
+			fread(&vi.boneIdx[3], header.data[5], 1, fp);
+			fread(&vi.boneweight[0], sizeof(float), 1, fp);
+			fread(&vi.boneweight[1], sizeof(float), 1, fp);
+			fread(&vi.boneweight[2], sizeof(float), 1, fp);
+			fread(&vi.boneweight[3], sizeof(float), 1, fp);
 		}
 		else if (vi.weight == 3)
 		{
-			fread(&vi.boneIdx.x, header.data[5], 1, fp);
-			fread(&vi.boneIdx.y, header.data[5], 1, fp);
-			fread(&vi.boneweight.x, sizeof(float), 1, fp);
+			fread(&vi.boneIdx[0], header.data[5], 1, fp);
+			fread(&vi.boneIdx[1], header.data[5], 1, fp);
+			fread(&vi.boneweight[0], sizeof(float), 1, fp);
 			fread(&vi.SDEFdata[0], sizeof(vi.SDEFdata[0]), 1, fp);
 			fread(&vi.SDEFdata[1], sizeof(vi.SDEFdata[1]), 1, fp);
 			fread(&vi.SDEFdata[2], sizeof(vi.SDEFdata[2]), 1, fp);
@@ -106,7 +105,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		{
 			wchar_t c;
 			fread(&c, sizeof(wchar_t), 1, fp);
-			str += c;
+			str.push_back(c);
 		}
 		_texVec[i] = str;
 	}
@@ -398,7 +397,7 @@ HRESULT PMXmodel::CreateWhiteTexture(ID3D12Device* _dev)
 		IID_PPV_ARGS(&whiteTex)
 	);
 
-	result = whiteTex->WriteToSubresource(0, nullptr, data.data(), 4 * 4, data.size());
+	result = whiteTex->WriteToSubresource(0, nullptr, data.data(), 4 * 4, static_cast<unsigned int>(data.size()));
 
 	return result;
 }
@@ -432,7 +431,7 @@ HRESULT PMXmodel::CreateBlackTexture(ID3D12Device* _dev)
 		IID_PPV_ARGS(&blackTex)
 	);
 
-	result = blackTex->WriteToSubresource(0, nullptr, data.data(), 4 * 4, data.size());
+	result = blackTex->WriteToSubresource(0, nullptr, data.data(), 4 * 4, static_cast<unsigned int>(data.size()));
 
 	return result;
 }
@@ -462,7 +461,7 @@ HRESULT PMXmodel::CreateVertexBuffer(ID3D12Device * _dev)
 
 	_vbView.BufferLocation = _vertexBuffer->GetGPUVirtualAddress();
 	_vbView.StrideInBytes = sizeof(PMXVertexInfo);
-	_vbView.SizeInBytes = vertexInfo.size() * sizeof(PMXVertexInfo);
+	_vbView.SizeInBytes = static_cast<unsigned int>(vertexInfo.size()) * sizeof(PMXVertexInfo);
 
 	return result;
 }
@@ -492,7 +491,7 @@ HRESULT PMXmodel::CreateIndexBuffer(ID3D12Device * _dev)
 
 	_idxView.BufferLocation = _indexBuffer->GetGPUVirtualAddress();//バッファの場所
 	_idxView.Format = DXGI_FORMAT_R16_UINT;//フォーマット(shortだからR16)
-	_idxView.SizeInBytes = _verindex.size() * sizeof(_verindex[0]);//総サイズ
+	_idxView.SizeInBytes = static_cast<unsigned int>(_verindex.size()) * sizeof(_verindex[0]);//総サイズ
 
 	return result;
 }
@@ -504,7 +503,7 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 	matDescHeap.NodeMask = 0;
 
 	// 定数バッファとシェーダーリソースビューとSphとSpaとトゥーンの５枚↓
-	matDescHeap.NumDescriptors = _materials.size() * 5;
+	matDescHeap.NumDescriptors = static_cast<unsigned int>(_materials.size()) * 5;
 	matDescHeap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	auto result = _dev->CreateDescriptorHeap(&matDescHeap, IID_PPV_ARGS(&_matDescHeap));
@@ -573,7 +572,7 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 
 		// 定数バッファの作成
 		matDesc.BufferLocation = _materialsBuff[i]->GetGPUVirtualAddress();
-		matDesc.SizeInBytes = size;
+		matDesc.SizeInBytes = static_cast<unsigned int>(size);
 		_dev->CreateConstantBufferView(&matDesc, matHandle);// 定数バッファビューの作成
 		matHandle.ptr += addsize;// ポインタの加算
 
@@ -677,7 +676,7 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 
 	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvdesc = {};
 	cbvdesc.BufferLocation = _boneBuffer->GetGPUVirtualAddress();
-	cbvdesc.SizeInBytes = size;
+	cbvdesc.SizeInBytes = static_cast<unsigned int>(size);
 
 	auto handle = _boneHeap->GetCPUDescriptorHandleForHeapStart();
 	_dev->CreateConstantBufferView(&cbvdesc, handle);
@@ -718,51 +717,36 @@ void PMXmodel::RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat)
 
 void PMXmodel::UpDate(char key[256])
 {
-	if (key[DIK_F])
-	{
-		if (_materials[21].Diffuse.w < 1.f)
-		{
-			_materials[21].Diffuse.w += 0.01f;
-		}
-	}
-	else
-	{
-		if (_materials[21].Diffuse.w > 0.f)
-		{
-			_materials[21].Diffuse.w -= 0.01f;
-		}
-	}
+	//if (key[DIK_F])
+	//{
+	//	if (_materials[21].Diffuse.w < 1.f)
+	//	{
+	//		_materials[21].Diffuse.w += 0.01f;
+	//	}
+	//}
+	//else
+	//{
+	//	if (_materials[21].Diffuse.w > 0.f)
+	//	{
+	//		_materials[21].Diffuse.w -= 0.01f;
+	//	}
+	//}
 
-	if (key[DIK_T])
-	{
-		if (_materials[22].Diffuse.w < 1.f)
-		{
-			_materials[22].Diffuse.w += 0.01f;
-		}
-	}
-	else
-	{
-		if (_materials[22].Diffuse.w > 0.f)
-		{
-			_materials[22].Diffuse.w -= 0.01f;
-		}
-	}
+	//if (key[DIK_T])
+	//{
+	//	if (_materials[22].Diffuse.w < 1.f)
+	//	{
+	//		_materials[22].Diffuse.w += 0.01f;
+	//	}
+	//}
+	//else
+	//{
+	//	if (_materials[22].Diffuse.w > 0.f)
+	//	{
+	//		_materials[22].Diffuse.w -= 0.01f;
+	//	}
+	//}
 
-	if (key[DIK_H])
-	{
-		angle += 0.01f;
-	}
-
-	if (key[DIK_M])
-	{
-		auto checkinfo = vertexInfo;
-		for (auto morph : _morphData[L"じと目"])
-		{
-			vertexInfo[morph.vertexMorph.verIdx].pos.x += morph.vertexMorph.pos.x / 10;
-			vertexInfo[morph.vertexMorph.verIdx].pos.y += morph.vertexMorph.pos.y / 10;
-			vertexInfo[morph.vertexMorph.verIdx].pos.z += morph.vertexMorph.pos.z / 10;
-		}
-	}
 	if (key[DIK_H])
 	{
 		angle += 0.01f;
@@ -791,7 +775,7 @@ void PMXmodel::UpDate(char key[256])
 	// ボーん
 	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
 
-	RotationMatrix(L"右肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix(L"左肩", DirectX::XMFLOAT3(angle, 0, 0));
+	RotationMatrix(L"右足", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix(L"左足", DirectX::XMFLOAT3(angle, 0, 0));
 
 	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
 	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
@@ -800,6 +784,36 @@ void PMXmodel::UpDate(char key[256])
 
 	// バッファの更新
 	BufferUpDate();
+}
+
+const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
+{
+	// 頂点レイアウト (構造体と順番を合わせること)
+	std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayoutDescs = {
+		// 座標
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0, D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// 法線
+		{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// UV
+		{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// 追加UV
+		{"ADDUV",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"ADDUV",1,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"ADDUV",2,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"ADDUV",3,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// wighttype
+		{"WEIGHTTYPE",0,DXGI_FORMAT_R8_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT ,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// ボーンインデックス
+		{"BONENO",0,DXGI_FORMAT_R8G8B8A8_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// weight
+		{"WEIGHT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+	};
+	return inputLayoutDescs;
+}
+
+const LPCWSTR PMXmodel::GetUseShader()
+{
+	return L"Shader.hlsl";
 }
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)
@@ -829,10 +843,10 @@ ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Devi
 	// リソースデスクの再設定
 	auto resDesc = CD3DX12_RESOURCE_DESC::Tex2D(
 		metadata.format,
-		metadata.width,
-		metadata.height,
-		metadata.arraySize,
-		metadata.mipLevels
+		static_cast<unsigned int>(metadata.width),
+		static_cast<unsigned int>(metadata.height),
+		static_cast<UINT16>(metadata.arraySize),
+		static_cast<UINT16>(metadata.mipLevels)
 	);
 
 	// テクスチャバッファの作成
@@ -850,8 +864,8 @@ ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Devi
 	result = texbuff->WriteToSubresource(0,
 		nullptr,
 		img->pixels,
-		img->rowPitch,
-		img->slicePitch
+		static_cast<unsigned int>(img->rowPitch),
+		static_cast<unsigned int>(img->slicePitch)
 	);
 
 	return texbuff;
@@ -917,6 +931,7 @@ HRESULT PMXmodel::CreateGrayGradationTexture(ID3D12Device* _dev)
 		nullptr,
 		IID_PPV_ARGS(&gradTex)
 	);
+
 
 	std::vector<unsigned int> data(4 * 256);
 	auto it = data.begin();

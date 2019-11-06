@@ -21,12 +21,12 @@ struct PMXVertexInfo {
 	XMFLOAT3 normal;
 	XMFLOAT2 uv;
 
-	XMFLOAT2 adduv[4];
+	XMFLOAT4 adduv[4];
 
 	unsigned char weight;
 
-	XMINT4 boneIdx;
-	XMFLOAT4 boneweight;
+	int boneIdx[4];
+	float boneweight[4];
 
 	XMFLOAT3 SDEFdata[3];
 	float edge;
@@ -245,17 +245,13 @@ public:
 	~PMXmodel();
 
 	void UpDate(char key[256]);
-	std::vector<PMXMaterial> GetMaterials() {
-		return _materials;
-	};
-	std::vector<unsigned int> GetVertexIndex() {
-		return _verindex;
-	};
+	std::vector<PMXMaterial> GetMaterials() { return _materials; };
 
+	const std::vector<D3D12_INPUT_ELEMENT_DESC> GetInputLayout();
 
 	D3D12_VERTEX_BUFFER_VIEW GetVertexView() { return _vbView; };
 	D3D12_INDEX_BUFFER_VIEW GetIndexView() { return _idxView; };
-
+	const LPCWSTR GetUseShader();
 	ID3D12DescriptorHeap*& GetBoneHeap() { return _boneHeap; };
 	ID3D12DescriptorHeap*& GetMaterialHeap() { return _matDescHeap; };
 };

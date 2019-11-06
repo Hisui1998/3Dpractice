@@ -32,10 +32,6 @@ HRESULT Dx12Wrapper::DeviceInit()
 		// 成功しているかのチェック
 		if (SUCCEEDED(result)) {
 			level = lv;
-			//pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミクmetal.pmd");
-			//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx");
-			//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx");
-			pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx");
 			break;
 		}
 	}
@@ -131,7 +127,7 @@ HRESULT Dx12Wrapper::CreateSwapChainAndCmdQue()
 		int descriptorSize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
 		// レンダーターゲットビュー本体の作成
-		for (unsigned int i = 0; i < renderTargetsNum; i++)
+		for (int i = 0; i < renderTargetsNum; i++)
 		{
 			result = _swapchain->GetBuffer(i, IID_PPV_ARGS(&renderTargets[i]));
 			if (FAILED(result))break;
@@ -166,13 +162,14 @@ HRESULT Dx12Wrapper::CreateFence()
 HRESULT Dx12Wrapper::LoadShader()
 {
 	HRESULT result;
-
+	//auto name = pmdModel->GetUseShader();
+	auto name = pmxModel->GetUseShader();
 	// 頂点シェーダ
-	result = D3DCompileFromFile(L"Shader.hlsl", nullptr, nullptr, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(name, nullptr, nullptr, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &vertexShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"Shader.hlsl", nullptr, nullptr, "ps", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(name, nullptr, nullptr, "ps", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pixelShader, nullptr);
 
 	return result;
@@ -276,39 +273,19 @@ HRESULT Dx12Wrapper::CreateRootSignature()
 HRESULT Dx12Wrapper::CreateGraphicsPipelineState()
 {
 	HRESULT result;	
-	// 頂点レイアウト (構造体と順番を合わせること)
-	D3D12_INPUT_ELEMENT_DESC inputLayoutDescs[] = {
-		// 座標
-		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0, D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		// 法線
-		{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		// UV
-		{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		// 追加UV
-		{"ADDUV",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"ADDUV",1,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"ADDUV",2,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"ADDUV",3,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		// wighttype
-		{"WEIGHTTYPE",0,DXGI_FORMAT_R8_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT ,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		// ボーンインデックス
-		{"BONENO",0,DXGI_FORMAT_R8G8B8A8_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		// weight
-		{"WEIGHT",0,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"WEIGHT",1,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"WEIGHT",2,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-		{"WEIGHT",3,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
-	};
+
+	auto inputLayoutDescs = pmxModel->GetInputLayout();
+	//auto inputLayoutDescs = pmdModel->GetInputLayout();
 
 	// パイプラインを作るためのGPSの変数の作成
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC gpsDesc = {};
 
 	//ルートシグネチャと頂点レイアウト
 	gpsDesc.pRootSignature = _rootSignature;
-	gpsDesc.InputLayout.pInputElementDescs = inputLayoutDescs;
-	gpsDesc.InputLayout.NumElements = _countof(inputLayoutDescs);
+	gpsDesc.InputLayout.pInputElementDescs = &(*inputLayoutDescs.begin());// 配列の開始位置
+	gpsDesc.InputLayout.NumElements = static_cast<unsigned int>(inputLayoutDescs.size());// 要素の数を入れる
 
-	//シェーダ系
+	//シェーダのセット
 	gpsDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader);
 	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader);
 
@@ -414,12 +391,11 @@ HRESULT Dx12Wrapper::CreateConstantBuffer()
 	// Mapping
 	result = _constBuff->Map(0,nullptr,(void**)&_wvpMP);
 	std::memcpy(_wvpMP,&_wvp,sizeof(_wvp));
-	//_constBuff->Unmap(0, nullptr);
 
 	// コンスタントバッファ用のデスク
 	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 	cbvDesc.BufferLocation = _constBuff->GetGPUVirtualAddress();
-	cbvDesc.SizeInBytes = size;
+	cbvDesc.SizeInBytes = static_cast<unsigned int>(size);
 
 	auto handle = _rgstDescHeap->GetCPUDescriptorHandleForHeapStart();
 	// コンスタントバッファビューの作成
@@ -493,6 +469,7 @@ void Dx12Wrapper::ExecuteCommand()
 
 Dx12Wrapper::Dx12Wrapper(HWND hwnd):_hwnd(hwnd)
 {
+	// イニシャライズ
 	auto result = CoInitializeEx(0, COINIT_MULTITHREADED);
 }
 
@@ -519,27 +496,34 @@ int Dx12Wrapper::Init()
 		debug->Release();
 	}
 #endif
-	// デバイスの初期化
+
+	// デバイスの生成
 	if (FAILED(DeviceInit())) 
 		return 1;
 
-	// スワップチェインの初期化
+	// モデル読み込み
+	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx");
+	//pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミクmetal.pmd");
+	pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx");
+	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx");
+
+	// スワップチェインの生成
 	if (FAILED(CreateSwapChainAndCmdQue())) 
 		return 2;
 
-	// コマンド系の初期化
+	// コマンド系の生成
 	if (FAILED(CreateCmdListAndAlloc())) 
 		return 3;
 
-	// フェンスの初期化
+	// フェンスの生成
 	if (FAILED(CreateFence())) 
 		return 4;
 
-	// シェーダーの初期化
+	// シェーダー読み込み
 	if (FAILED(LoadShader()))
 		return 5;
 
-	// シグネチャの初期化
+	// シグネチャの生成
 	if (FAILED(CreateRootSignature())) 
 		return 6;
 
@@ -566,7 +550,7 @@ void Dx12Wrapper::UpDate()
 	// キーの入力
 	char Oldkey[256];
 	int i = 0;
-	for (auto k : key)
+	for (auto& k : key)
 	{
 		Oldkey[i++] = k;
 	}
@@ -624,7 +608,7 @@ void Dx12Wrapper::UpDate()
 
 	if (key[DIK_R])
 	{
-		eye = XMFLOAT3(0, 10, -15);
+		eye = XMFLOAT3(0, 10, -25);
 		target = XMFLOAT3(0, 10, 0);
 		up = XMFLOAT3(0, 1, 0);
 
@@ -652,8 +636,8 @@ void Dx12Wrapper::UpDate()
 		DirectX::XMLoadFloat3(&up)
 	);
 	pmxModel->UpDate(key);
+	//pmdModel->UpDate();
 
-	// 回転するやつ
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
 
 	_wvp.wvp = _wvp.world;
@@ -668,8 +652,8 @@ void Dx12Wrapper::UpDate()
 	D3D12_VIEWPORT _viewport;
 	_viewport.TopLeftX = 0;
 	_viewport.TopLeftY = 0;
-	_viewport.Width  = Application::Instance().GetWindowSize().width;
-	_viewport.Height = Application::Instance().GetWindowSize().height;
+	_viewport.Width  = static_cast<float>(Application::Instance().GetWindowSize().width);
+	_viewport.Height = static_cast<float>(Application::Instance().GetWindowSize().height);
 	_viewport.MaxDepth = 1.0f;
 	_viewport.MinDepth = 0.0f;
 
@@ -728,9 +712,11 @@ void Dx12Wrapper::UpDate()
 
 	// インデックス情報のセット
 	_cmdList->IASetIndexBuffer(&pmxModel->GetIndexView());
+	//_cmdList->IASetIndexBuffer(&pmdModel->GetIndexView());
 
 	// 頂点バッファビューの設定
 	_cmdList->IASetVertexBuffers(0, 1, &pmxModel->GetVertexView());
+	//_cmdList->IASetVertexBuffers(0, 1, &pmdModel->GetVertexView());
 
 	// トポロジーのセット
 	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -740,6 +726,9 @@ void Dx12Wrapper::UpDate()
 	unsigned int offset = 0;
 	auto boneheap = pmxModel->GetBoneHeap();
 	auto materialheap = pmxModel->GetMaterialHeap();
+
+	//auto boneheap = pmdModel->GetBoneHeap();
+	//auto materialheap = pmdModel->GetMaterialHeap();
 
 	// デスクリプターハンドル一枚のサイズ取得
 	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -766,6 +755,8 @@ void Dx12Wrapper::UpDate()
 
 
 	// 描画ループ
+
+	//for (auto& m : pmdModel->GetMaterials()) {
 	for (auto& m : pmxModel->GetMaterials()) {
 		// デスクリプタテーブルのセット
 		_cmdList->SetGraphicsRootDescriptorTable(1, mathandle);
@@ -795,5 +786,6 @@ void Dx12Wrapper::UpDate()
 	// 待ち
 	WaitWithFence();
 
-	_swapchain->Present(0, 0);
+	// 画面の更新
+	_swapchain->Present(1, 0);
 }

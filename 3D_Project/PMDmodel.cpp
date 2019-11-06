@@ -24,8 +24,9 @@ PMDmodel::~PMDmodel()
 
 void PMDmodel::UpDate()
 {
+	angle = 0;
 	//angle = DirectX::XM_PIDIV4;
-	angle+=10*DirectX::XM_PI/180;
+	//angle+=10*DirectX::XM_PI/180;
 	// 実験
 	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 	RotationMatrix("右肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("右ひじ", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("左肩", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix("左ひじ", DirectX::XMFLOAT3(angle, 0, 0));
@@ -64,14 +65,26 @@ std::vector<PMDMaterial> PMDmodel::GetMaterials()
 	return _materials;
 }
 
-std::vector<unsigned short> PMDmodel::GetVertexIndex()
-{
-	return _verindex;
+const std::vector<D3D12_INPUT_ELEMENT_DESC> PMDmodel::GetInputLayout()
+{// 頂点レイアウト (構造体と順番を合わせること)
+	std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayoutDescs = {
+		// 座標
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0, D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// 法線
+		{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// UV
+		{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// ボーンインデックス
+		{"BONENO",0,DXGI_FORMAT_R16G16_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// ウェイト
+		{"WEIGHT",0,DXGI_FORMAT_R32G32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+	};
+	return inputLayoutDescs;
 }
 
-std::vector<PMDVertexInfo> PMDmodel::GetVertexInfo()
+const LPCWSTR PMDmodel::GetUseShader()
 {
-	return _vivec;
+	return L"PMDShader.hlsl";
 }
 
 ID3D12DescriptorHeap *& PMDmodel::GetBoneHeap()
@@ -184,8 +197,13 @@ void PMDmodel::LoadModel(ID3D12Device* _dev,const std::string modelPath)
 	}
 	fclose(fp);
 
+	CreateVertexBuffer(_dev);
+
+	CreateIndexBuffer(_dev);
+
 	// マテリアルバッファの作成
 	CreateMaterialBuffer(_dev);
+
 	// ボーンツリー作成
 	CreateBoneTree();
 	// ボーンバッファ作成
@@ -624,5 +642,66 @@ HRESULT PMDmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 		matHandle.ptr += addsize;
 
 	}
+	return result;
+}
+
+
+HRESULT PMDmodel::CreateVertexBuffer(ID3D12Device * _dev)
+{
+	// ヒープの情報設定
+	D3D12_HEAP_PROPERTIES heapprop = {};
+	heapprop.Type = D3D12_HEAP_TYPE_UPLOAD;//CPUからGPUへ転送する用
+	heapprop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	heapprop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+	// create
+	auto result = _dev->CreateCommittedResource(
+		&heapprop,
+		D3D12_HEAP_FLAG_NONE,//特別な指定なし
+		&CD3DX12_RESOURCE_DESC::Buffer(_vivec.size() * sizeof(PMDVertexInfo)),
+		D3D12_RESOURCE_STATE_GENERIC_READ,//よみこみ
+		nullptr,//nullptrでいい
+		IID_PPV_ARGS(&_vertexBuffer));//いつもの
+
+	// 頂点バッファのマッピング
+	PMDVertexInfo* vertMap = nullptr;
+	result = _vertexBuffer->Map(0, nullptr, (void**)&vertMap);
+	std::copy(_vivec.begin(), _vivec.end(), vertMap);
+	_vertexBuffer->Unmap(0, nullptr);
+
+	_vbView.BufferLocation = _vertexBuffer->GetGPUVirtualAddress();
+	_vbView.StrideInBytes = sizeof(PMDVertexInfo);
+	_vbView.SizeInBytes = static_cast<unsigned int>(_vivec.size()) * sizeof(PMDVertexInfo);
+
+	return result;
+}
+
+HRESULT PMDmodel::CreateIndexBuffer(ID3D12Device * _dev)
+{
+	// ヒープの情報設定
+	D3D12_HEAP_PROPERTIES heapprop = {};
+	heapprop.Type = D3D12_HEAP_TYPE_UPLOAD;//CPUからGPUへ転送する用
+	heapprop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	heapprop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+	auto result = _dev->CreateCommittedResource(
+		&heapprop,
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(_verindex.size() * sizeof(_verindex[0])),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&_indexBuffer));
+
+	// インデックスバッファのマッピング
+	unsigned short* idxMap = nullptr;
+	result = _indexBuffer->Map(0, nullptr, (void**)&idxMap);
+	std::copy(std::begin(_verindex), std::end(_verindex), idxMap);
+
+	_indexBuffer->Unmap(0, nullptr);
+
+	_idxView.BufferLocation = _indexBuffer->GetGPUVirtualAddress();//バッファの場所
+	_idxView.Format = DXGI_FORMAT_R16_UINT;//フォーマット(shortだからR16)
+	_idxView.SizeInBytes = static_cast<unsigned int>(_verindex.size()) * sizeof(_verindex[0]);//総サイズ
+
 	return result;
 }
