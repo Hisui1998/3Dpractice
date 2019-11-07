@@ -6,6 +6,7 @@
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
 #include <DirectXTex.h>
+#include "VMDMotion.h"
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
@@ -360,6 +361,7 @@ void PMXmodel::BufferUpDate()
 PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath)
 {
 	LoadModel(dev,modelPath);
+	vmdData = std::make_shared<VMDMotion>("VMD/DanceRobotDance_Motion.vmd");
 }
 
 
@@ -632,7 +634,7 @@ void PMXmodel::CreateBoneTree()
 {
 	_boneMats.resize(_bones.size());
 	// 単位行列で初期化
-	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
+	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 	
 	for (int idx = 0; idx < _bones.size(); ++idx) {
 		auto& b = _bones[idx];
@@ -695,7 +697,7 @@ void PMXmodel::RotationMatrix(std::wstring bonename, XMFLOAT3 theta)
 
 	//原点まで並行移動してそこで回転を行い、元の位置まで戻す
 	_boneMats[boneNode.boneIdx] =
-		XMMatrixTranslationFromVector(XMVectorScale(start, -1))*		XMMatrixRotationX(theta.x)*		XMMatrixRotationY(theta.y)*		XMMatrixRotationZ(theta.z)*		XMMatrixTranslationFromVector(start);
+		DirectX::XMMatrixTranslationFromVector(XMVectorScale(start, -1))*		DirectX::XMMatrixRotationX(theta.x)*		DirectX::XMMatrixRotationY(theta.y)*		DirectX::XMMatrixRotationZ(theta.z)*		DirectX::XMMatrixTranslationFromVector(start);
 }
 
 void PMXmodel::RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat)
@@ -760,9 +762,10 @@ void PMXmodel::UpDate(char key[256])
 
 	// マテリアルカラーの転送
 	int midx = 0;
-	for (auto& mbuff : _materialsBuff) {
+	for (auto& mbuff : _materialsBuff) 
+	{
+		mbuff->Map(0, nullptr, (void**)&MapColor);
 
-		//auto result = mbuff->Map(0, nullptr, (void**)&MapColor);
 		MapColor->diffuse = _materials[midx].Diffuse;
 
 		MapColor->ambient = _materials[midx].Ambient;
@@ -772,16 +775,15 @@ void PMXmodel::UpDate(char key[256])
 		MapColor->specular.z = _materials[midx].Specular.z;
 		MapColor->specular.w = _materials[midx].SpecularPow;
 
-		//mbuff->Unmap(0, nullptr);
-
 		++midx;
 	}
 	
 
 	// ボーん
-	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
+	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 
-	//_boneMats[_boneMap[L"右ひじ"].boneIdx] = XMMatrixRotationZ(angle);	//_boneMats[_boneMap[L"左ひじ"].boneIdx] = XMMatrixRotationZ(angle);	RotationMatrix(L"右ひじ", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix(L"左ひじ", DirectX::XMFLOAT3(angle, 0, 0));
+	RotationMatrix(L"右ひじ",XMFLOAT3(0,0,angle));
+	RotationMatrix(L"左ひじ", XMFLOAT3(0, 0, angle));
 
 	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
 	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
@@ -789,7 +791,7 @@ void PMXmodel::UpDate(char key[256])
 	std::copy(_boneMats.begin(), _boneMats.end(), _sendBone);
 
 	// バッファの更新
-	//BufferUpDate();
+	BufferUpDate();
 }
 
 const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()

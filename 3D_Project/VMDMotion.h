@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
+#include <vector>
 
+#pragma pack(1)
 // ヘッダー情報
 struct VMDHeader {
 	char VmdHeader[30];
@@ -15,6 +17,7 @@ struct MotionInfo {
 	float Rotatation[4];// 回転
 	unsigned char Interpolation[64];// 補完
 };
+#pragma pack()
 
 // 表情情報
 struct MorphInfo { // 23 Bytes // 表情
@@ -52,6 +55,9 @@ class VMDMotion
 {
 private:
 	void LoadVMD(std::string fileName);
+
+	VMDHeader header;
+	std::vector<MotionInfo> _motionInfo;
 
 	unsigned int MotionCount;// モーション数
 	unsigned int MorphCount;// 表情数

@@ -66,9 +66,6 @@ Out vs(
     float2 uv               : TEXCOORD,
 
 	float4x4 adduv : ADDUV,
-	//float4 adduv2           : ADDUV1,
-	//float4 adduv3           : ADDUV2,
-	//float4 adduv4           : ADDUV3,
 
 	min16uint weighttype : WEIGHTTYPE,
 
@@ -113,8 +110,6 @@ Out vs(
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
 {
-    return float4(saturate(o.weight.x), saturate(o.weight.y), saturate(o.weight.z), 1);
-
     // 視線ベクトル
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;

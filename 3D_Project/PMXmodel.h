@@ -4,6 +4,8 @@
 #include <map>
 #include "Dx12Wrapper.h"
 
+class VMDMotion;
+
 using namespace DirectX;
 
 // PMXモデル情報
@@ -195,6 +197,7 @@ private:
 
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
+	std::shared_ptr<VMDMotion> vmdData;
 
 	std::map<std::wstring, MorphHeader> _morphHeaders;// もーふの名前からもーふのヘッダー情報をとってくる
 	std::map<std::wstring, std::vector<MorphOffsets>> _morphData;// もーふの名前からもーふ情報をとってくる
