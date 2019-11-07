@@ -162,8 +162,8 @@ HRESULT Dx12Wrapper::CreateFence()
 HRESULT Dx12Wrapper::LoadShader()
 {
 	HRESULT result;
-	//auto name = pmdModel->GetUseShader();
-	auto name = pmxModel->GetUseShader();
+	auto name = isPMD? pmdModel->GetUseShader():pmxModel->GetUseShader();
+
 	// 頂点シェーダ
 	result = D3DCompileFromFile(name, nullptr, nullptr, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &vertexShader, nullptr);
@@ -282,7 +282,7 @@ HRESULT Dx12Wrapper::CreateGraphicsPipelineState()
 
 	//ルートシグネチャと頂点レイアウト
 	gpsDesc.pRootSignature = _rootSignature;
-	gpsDesc.InputLayout.pInputElementDescs = &(*inputLayoutDescs.begin());// 配列の開始位置
+	gpsDesc.InputLayout.pInputElementDescs = inputLayoutDescs.data();// 配列の開始位置
 	gpsDesc.InputLayout.NumElements = static_cast<unsigned int>(inputLayoutDescs.size());// 要素の数を入れる
 
 	//シェーダのセット
@@ -500,11 +500,11 @@ int Dx12Wrapper::Init()
 	// デバイスの生成
 	if (FAILED(DeviceInit())) 
 		return 1;
-
+	isPMD = false;
 	// モデル読み込み
 	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx");
-	//pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミクmetal.pmd");
-	pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx");
+	pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミク.pmd");
+	pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx");
 	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx");
 
 	// スワップチェインの生成
@@ -563,6 +563,10 @@ void Dx12Wrapper::UpDate()
 	}
 
 	float addsize = 0.1f;
+	if (key[DIK_ESCAPE])
+	{
+		PostQuitMessage(0);
+	}
 
 	if (key[DIK_UP])
 	{
@@ -635,8 +639,8 @@ void Dx12Wrapper::UpDate()
 		DirectX::XMLoadFloat3(&target),
 		DirectX::XMLoadFloat3(&up)
 	);
-	pmxModel->UpDate(key);
-	//pmdModel->UpDate();
+	isPMD?pmdModel->UpDate():pmxModel->UpDate(key);
+	
 
 	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
 
@@ -711,12 +715,10 @@ void Dx12Wrapper::UpDate()
 	_cmdList->ClearDepthStencilView(_dsvDescHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
 	// インデックス情報のセット
-	_cmdList->IASetIndexBuffer(&pmxModel->GetIndexView());
-	//_cmdList->IASetIndexBuffer(&pmdModel->GetIndexView());
+	_cmdList->IASetIndexBuffer(&(isPMD? pmdModel->GetIndexView():pmxModel->GetIndexView()));
 
 	// 頂点バッファビューの設定
-	_cmdList->IASetVertexBuffers(0, 1, &pmxModel->GetVertexView());
-	//_cmdList->IASetVertexBuffers(0, 1, &pmdModel->GetVertexView());
+	_cmdList->IASetVertexBuffers(0, 1, &(isPMD ? pmdModel->GetVertexView(): pmxModel->GetVertexView()));
 
 	// トポロジーのセット
 	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -724,11 +726,8 @@ void Dx12Wrapper::UpDate()
 	// モデルのマテリアル適用
 	// どのインデックスから始めるかを入れておく変数
 	unsigned int offset = 0;
-	auto boneheap = pmxModel->GetBoneHeap();
-	auto materialheap = pmxModel->GetMaterialHeap();
-
-	//auto boneheap = pmdModel->GetBoneHeap();
-	//auto materialheap = pmdModel->GetMaterialHeap();
+	auto boneheap = isPMD? pmdModel->GetBoneHeap():pmxModel->GetBoneHeap();
+	auto materialheap = isPMD ? pmdModel->GetMaterialHeap():pmxModel->GetMaterialHeap();
 
 	// デスクリプターハンドル一枚のサイズ取得
 	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);

@@ -52,6 +52,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shader.hlsl" />
+    <FxCompile Include="PMXShader.hlsl" />
+    <FxCompile Include="PMDShader.hlsl" />
   </ItemGroup>
 </Project>

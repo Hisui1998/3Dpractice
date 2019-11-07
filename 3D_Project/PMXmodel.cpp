@@ -78,7 +78,6 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 			fread(&vi.SDEFdata[1], sizeof(vi.SDEFdata[1]), 1, fp);
 			fread(&vi.SDEFdata[2], sizeof(vi.SDEFdata[2]), 1, fp);
 		}
-
 		// エッジの読み込み
 		fread(&vi.edge, sizeof(float), 1, fp);
 	}
@@ -453,6 +452,7 @@ HRESULT PMXmodel::CreateVertexBuffer(ID3D12Device * _dev)
 		nullptr,//nullptrでいい
 		IID_PPV_ARGS(&_vertexBuffer));//いつもの
 
+	auto desc = CD3DX12_RESOURCE_DESC::Buffer(vertexInfo.size() * sizeof(PMXVertexInfo));
 	// 頂点バッファのマッピング
 	PMXVertexInfo* vertMap = nullptr;
 	result = _vertexBuffer->Map(0, nullptr, (void**)&vertMap);
@@ -638,7 +638,7 @@ void PMXmodel::CreateBoneTree()
 		auto& b = _bones[idx];
 		auto& boneNode = _boneMap[b.name];
 		boneNode.boneIdx = idx;
-		if (b.boneIndex!=0xffff)
+		if (b.boneIndex < _bones.size())
 		{
 			boneNode.startPos = b.pos;
 			boneNode.endPos = _bones[b.boneIndex].pos;
@@ -681,15 +681,9 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 	auto handle = _boneHeap->GetCPUDescriptorHandleForHeapStart();
 	_dev->CreateConstantBufferView(&cbvdesc, handle);
 
-	result = _boneBuffer->Map(0, nullptr, (void**)&_mappedBones);
-
-	for(auto& bm: _boneMats)
-	{
-		bm = XMMatrixRotationZ(XM_PIDIV4);
-	}
-
-
-	std::copy(std::begin(_boneMats), std::end(_boneMats), _mappedBones);
+	result = _boneBuffer->Map(0, nullptr, (void**)&_sendBone);
+	
+	std::copy(std::begin(_boneMats), std::end(_boneMats), _sendBone);
 
 	return result;
 }
@@ -717,35 +711,47 @@ void PMXmodel::RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat)
 
 void PMXmodel::UpDate(char key[256])
 {
-	//if (key[DIK_F])
-	//{
-	//	if (_materials[21].Diffuse.w < 1.f)
-	//	{
-	//		_materials[21].Diffuse.w += 0.01f;
-	//	}
-	//}
-	//else
-	//{
-	//	if (_materials[21].Diffuse.w > 0.f)
-	//	{
-	//		_materials[21].Diffuse.w -= 0.01f;
-	//	}
-	//}
+	if (key[DIK_F])
+	{
+		for (auto &md: _morphData[L"青ざめ"])
+		{
+			if (_materials[md.materialMorph.materialIdx].Diffuse.w < 1.f)
+			{
+				_materials[md.materialMorph.materialIdx].Diffuse.w += 0.1f;
+			}
+		}
+	}
+	else
+	{
+		for (auto &md : _morphData[L"青ざめ"])
+		{
+			if (_materials[md.materialMorph.materialIdx].Diffuse.w > 0.f)
+			{
+				_materials[md.materialMorph.materialIdx].Diffuse.w -= 0.1f;
+			}
+		}
+	}
 
-	//if (key[DIK_T])
-	//{
-	//	if (_materials[22].Diffuse.w < 1.f)
-	//	{
-	//		_materials[22].Diffuse.w += 0.01f;
-	//	}
-	//}
-	//else
-	//{
-	//	if (_materials[22].Diffuse.w > 0.f)
-	//	{
-	//		_materials[22].Diffuse.w -= 0.01f;
-	//	}
-	//}
+	if (key[DIK_T])
+	{
+		for (auto &md : _morphData[L"照れ"])
+		{
+			if (_materials[md.materialMorph.materialIdx].Diffuse.w < 1.f)
+			{
+				_materials[md.materialMorph.materialIdx].Diffuse.w += 0.1f;
+			}
+		}
+	}
+	else
+	{
+		for (auto &md : _morphData[L"照れ"])
+		{
+			if (_materials[md.materialMorph.materialIdx].Diffuse.w > 0.f)
+			{
+				_materials[md.materialMorph.materialIdx].Diffuse.w -= 0.1f;
+			}
+		}
+	}
 
 	if (key[DIK_H])
 	{
@@ -756,7 +762,7 @@ void PMXmodel::UpDate(char key[256])
 	int midx = 0;
 	for (auto& mbuff : _materialsBuff) {
 
-		auto result = mbuff->Map(0, nullptr, (void**)&MapColor);
+		//auto result = mbuff->Map(0, nullptr, (void**)&MapColor);
 		MapColor->diffuse = _materials[midx].Diffuse;
 
 		MapColor->ambient = _materials[midx].Ambient;
@@ -766,7 +772,7 @@ void PMXmodel::UpDate(char key[256])
 		MapColor->specular.z = _materials[midx].Specular.z;
 		MapColor->specular.w = _materials[midx].SpecularPow;
 
-		mbuff->Unmap(0, nullptr);
+		//mbuff->Unmap(0, nullptr);
 
 		++midx;
 	}
@@ -775,15 +781,15 @@ void PMXmodel::UpDate(char key[256])
 	// ボーん
 	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
 
-	RotationMatrix(L"右足", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix(L"左足", DirectX::XMFLOAT3(angle, 0, 0));
+	//_boneMats[_boneMap[L"右ひじ"].boneIdx] = XMMatrixRotationZ(angle);	//_boneMats[_boneMap[L"左ひじ"].boneIdx] = XMMatrixRotationZ(angle);	RotationMatrix(L"右ひじ", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix(L"左ひじ", DirectX::XMFLOAT3(angle, 0, 0));
 
 	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
 	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
 
-	std::copy(_boneMats.begin(), _boneMats.end(), _mappedBones);
+	std::copy(_boneMats.begin(), _boneMats.end(), _sendBone);
 
 	// バッファの更新
-	BufferUpDate();
+	//BufferUpDate();
 }
 
 const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
@@ -804,7 +810,7 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
 		// wighttype
 		{"WEIGHTTYPE",0,DXGI_FORMAT_R8_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT ,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// ボーンインデックス
-		{"BONENO",0,DXGI_FORMAT_R8G8B8A8_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"BONENO",0,DXGI_FORMAT_R32G32B32A32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// weight
 		{"WEIGHT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 	};
@@ -813,7 +819,7 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
 
 const LPCWSTR PMXmodel::GetUseShader()
 {
-	return L"Shader.hlsl";
+	return L"PMXShader.hlsl";
 }
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)

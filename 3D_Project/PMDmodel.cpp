@@ -24,8 +24,8 @@ PMDmodel::~PMDmodel()
 
 void PMDmodel::UpDate()
 {
-	angle = 0;
-	//angle = DirectX::XM_PIDIV4;
+	//angle = 0;
+	angle = DirectX::XM_PIDIV4;
 	//angle+=10*DirectX::XM_PI/180;
 	// 実験
 	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
@@ -77,7 +77,7 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMDmodel::GetInputLayout()
 		// ボーンインデックス
 		{"BONENO",0,DXGI_FORMAT_R16G16_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// ウェイト
-		{"WEIGHT",0,DXGI_FORMAT_R32G32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"WEIGHT",0,DXGI_FORMAT_R8_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 	};
 	return inputLayoutDescs;
 }

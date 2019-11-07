@@ -109,6 +109,8 @@ private:
 
 	std::shared_ptr<PMDmodel> pmdModel;
 	std::shared_ptr<PMXmodel> pmxModel;
+
+	bool isPMD = false;
 public:
 	Dx12Wrapper(HWND hwnd);
 	~Dx12Wrapper();

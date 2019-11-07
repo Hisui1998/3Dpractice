@@ -6,15 +6,6 @@
 
 using namespace DirectX;
 
-#pragma pack(1)
-// PMXファイルのヘッダ情報
-struct PMXHeader {
-	unsigned char extension[4];//"PMX":4
-	float version;// ver(2.0/2.1):4
-	unsigned char bytesize;// 後続するデータ列のバイトサイズ  *PMX2.0は 8 で固定
-	unsigned char data[8];// エンコード方式とかが入っているバイト文字列
-};
-
 // PMXモデル情報
 struct PMXVertexInfo {
 	XMFLOAT3 pos;
@@ -30,6 +21,16 @@ struct PMXVertexInfo {
 
 	XMFLOAT3 SDEFdata[3];
 	float edge;
+};
+
+// 戦犯
+#pragma pack(1)
+// PMXファイルのヘッダ情報
+struct PMXHeader {
+	unsigned char extension[4];//"PMX":4
+	float version;// ver(2.0/2.1):4
+	unsigned char bytesize;// 後続するデータ列のバイトサイズ  *PMX2.0は 8 で固定
+	unsigned char data[8];// エンコード方式とかが入っているバイト文字列
 };
 
 // 以下もーふの種別毎の構造体
@@ -226,11 +227,11 @@ private:
 
 
 	std::vector<int>_orderMoveIdx;// 動かす順番にボーンインデックスを入れる（仮）
+
 	std::vector<BoneInfo>_bones;
-	std::vector<BoneInfo>_boneOrders[4];
 	std::map<std::wstring, PMXBoneNode> _boneMap;//ボーンマップ
-	std::vector<XMMATRIX>_boneMats;// 転送用
-	XMMATRIX* _mappedBones = nullptr;
+	std::vector<XMMATRIX>_boneMats;
+	XMMATRIX* _sendBone = nullptr;// 転送用
 
 	float angle = 0;
 
