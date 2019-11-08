@@ -166,6 +166,7 @@ private:
 
 	void BufferUpDate();
 
+	void MotionUpDate(int frameno);
 
 	void CreateBoneTree();
 
@@ -191,7 +192,8 @@ private:
 
 	void CreateBoneOrder(PMXBoneNode& node,int level);
 
-	void RotationMatrix(std::wstring bonename, XMFLOAT3 theta);
+	void RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1);
+	void RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1, const XMFLOAT4 &quat2, float pow = 0.0f);
 
 	void RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat);
 
@@ -228,6 +230,7 @@ private:
 	std::vector<ID3D12Resource*> _toonResources;// トゥーン
 	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
 
+	std::shared_ptr<VMDMotion>_vmdData;
 
 	std::vector<int>_orderMoveIdx;// 動かす順番にボーンインデックスを入れる（仮）
 
@@ -242,8 +245,11 @@ private:
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
 
 	PMXColor* MapColor = nullptr;
-	std::string FolderPath;
 
+	std::string FolderPath;
+	unsigned int AnimFlame;
+	float _morphWeight;
+	char Oldkey[256];
 public:
 	PMXmodel(ID3D12Device* dev, const std::string modelPath);
 	~PMXmodel();
@@ -258,4 +264,6 @@ public:
 	const LPCWSTR GetUseShader();
 	ID3D12DescriptorHeap*& GetBoneHeap() { return _boneHeap; };
 	ID3D12DescriptorHeap*& GetMaterialHeap() { return _matDescHeap; };
+
+	void SetVMDFlame(unsigned int flame);
 };
