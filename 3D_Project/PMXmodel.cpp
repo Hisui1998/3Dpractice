@@ -310,6 +310,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 	// Vmdì«Ç›çûÇ›
 	_vmdData = std::make_shared<VMDMotion>("VMD/DanceRobotDance_Motion.vmd");
+	//_vmdData = std::make_shared<VMDMotion>("VMD/ÉÑÉSÉRÉçÉ_ÉìÉX.vmd");
 	AnimFlame = 0;
 	_morphWeight = 0;
 	for (auto &k: Oldkey)
