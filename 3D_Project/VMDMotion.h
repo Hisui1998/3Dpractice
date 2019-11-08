@@ -1,5 +1,8 @@
 #pragma once
+#include <DirectXMath.h>
 #include <string>
+#include <map>
+#include <vector>
 
 // ヘッダー情報
 struct VMDHeader {
@@ -7,14 +10,16 @@ struct VMDHeader {
 	char VmdModelName[20];
 };
 
+#pragma pack(1)
 // モーション情報
 struct MotionInfo {
 	char BoneName[15]; // ボーン名
 	unsigned int FrameNo; // フレーム番号
-	float Location[3]; // 位置
-	float Rotatation[4];// 回転
+	DirectX::XMFLOAT3 Location; // 位置
+	DirectX::XMFLOAT4 Rotatation;// 回転
 	unsigned char Interpolation[64];// 補完
 };
+#pragma pack()
 
 // 表情情報
 struct MorphInfo { // 23 Bytes // 表情
@@ -53,6 +58,10 @@ class VMDMotion
 private:
 	void LoadVMD(std::string fileName);
 
+	std::map<std::string, std::vector<MotionInfo>> _animData;
+
+	int flame;
+
 	unsigned int MotionCount;// モーション数
 	unsigned int MorphCount;// 表情数
 	unsigned int CameraCount;// カメラ数
@@ -61,5 +70,8 @@ private:
 public:
 	VMDMotion(std::string fileName);
 	~VMDMotion();
+
+	std::map<std::string, std::vector<MotionInfo>>GetAnimData();
+	int Duration() { return ++flame; };
 };
 

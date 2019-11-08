@@ -83,15 +83,23 @@ Out vs(
 	
     if (weighttype == 1)
     {
-        m = boneMats[boneno.x] * float(weight.x) + boneMats[boneno.y] * (1.0f - float(weight.x));
+        m = 
+        boneMats[boneno.x] * float(weight.x) + 
+        boneMats[boneno.y] * (1.0f - float(weight.x));
     }
     else if (weighttype == 2)
     {
-        m = boneMats[boneno.x] * float(weight.x) + boneMats[boneno.y] * float(weight.y) + boneMats[boneno.z] * float(weight.z) + boneMats[boneno.w] * float(weight.w);
+        m = 
+        boneMats[boneno.x] * float(weight.x) + 
+        boneMats[boneno.y] * float(weight.y) + 
+        boneMats[boneno.z] * float(weight.z) + 
+        boneMats[boneno.w] * float(weight.w);
     }
 	else if (weighttype == 3)
 	{
-        m = boneMats[boneno.x] * float(weight.x) + boneMats[boneno.y] * (1.0f - float(weight.x));
+        m = 
+        boneMats[boneno.x] * float(weight.x) + 
+        boneMats[boneno.y] * (1.0f - float(weight.x));
     }
 
 	float4 movepos = mul(m, float4(pos, 1));
@@ -113,8 +121,6 @@ Out vs(
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
 {
-    return float4(saturate(o.weight.x), saturate(o.weight.y), saturate(o.weight.z), 1);
-
     // 視線ベクトル
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;
@@ -135,8 +141,8 @@ float4 ps(Out o):SV_TARGET
 
     float4 texColor = tex.Sample(smp, o.uv); //テクスチャカラー
 
-	return saturate(texColor * diffuse * toonDif);
-                    + saturate(specularB*specular);
+	return saturate(texColor * diffuse * toonDif)
+                +saturate(float4(specularB * specular.rgb, 0.0f));
 
     return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
             + spa.Sample(smp, sphereMapUV) * texColor

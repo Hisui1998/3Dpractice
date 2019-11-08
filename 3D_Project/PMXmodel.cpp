@@ -6,6 +6,7 @@
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
 #include <DirectXTex.h>
+#include "VMDMotion.h"
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
@@ -307,6 +308,15 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 	fclose(fp);
 
+	// Vmd読み込み
+	_vmdData = std::make_shared<VMDMotion>("VMD/DanceRobotDance_Motion.vmd");
+	AnimFlame = 0;
+	_morphWeight = 0;
+	for (auto &k: Oldkey)
+	{
+		k = 0;
+	}
+
 	// 各バッファの初期化
 	_materialsBuff.resize(matNum);
 	_toonResources.resize(matNum);
@@ -355,6 +365,51 @@ void PMXmodel::BufferUpDate()
 	result = _indexBuffer->Map(0, nullptr, (void**)&idxMap);
 	std::copy(std::begin(_verindex), std::end(_verindex), idxMap);
 	_indexBuffer->Unmap(0, nullptr);
+}
+
+void PMXmodel::MotionUpDate(int frameno)
+{
+	// ボーん
+	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
+	for (auto& boneanim : _vmdData->GetAnimData()) {
+		auto& boneName = boneanim.first;
+		auto& keyframes = boneanim.second;
+
+		// 今使うモーションデータを取得
+		auto frameIt = std::find_if(keyframes.rbegin(), keyframes.rend(),
+			[frameno](const MotionInfo& k) {return k.FrameNo <= frameno; });
+		if (frameIt == keyframes.rend())continue;
+
+		// イテレータを反転させて次の要素をとってくる
+		auto nextIt = frameIt.base();
+
+		if (nextIt == keyframes.end()) {
+			// 回転
+			RotationMatrix(GetWstringFromString(boneName), frameIt->Rotatation);
+			
+			// 座標移動
+			_boneMats[_boneMap[GetWstringFromString(boneName)].boneIdx]
+				*= DirectX::XMMatrixTranslationFromVector(XMLoadFloat3(&frameIt->Location));
+		}
+		else
+		{
+			// 現在のﾌﾚｰﾑ位置から重み計算
+			float pow = (static_cast<float>(frameno) - frameIt->FrameNo) / (nextIt->FrameNo - frameIt->FrameNo);
+
+			// 回転
+			RotationMatrix(GetWstringFromString(boneName), frameIt->Rotatation, nextIt->Rotatation, pow);
+
+			// 座標移動
+			_boneMats[_boneMap[GetWstringFromString(boneName)].boneIdx]
+				*= DirectX::XMMatrixTranslationFromVector(XMVectorLerp(XMLoadFloat3(&frameIt->Location),XMLoadFloat3(&nextIt->Location), pow));			
+		}
+	}
+
+	// ツリーのトラバース
+	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
+	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
+
+	std::copy(_boneMats.begin(), _boneMats.end(), _sendBone);
 }
 
 PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath)
@@ -632,7 +687,7 @@ void PMXmodel::CreateBoneTree()
 {
 	_boneMats.resize(_bones.size());
 	// 単位行列で初期化
-	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
+	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 	
 	for (int idx = 0; idx < _bones.size(); ++idx) {
 		auto& b = _bones[idx];
@@ -688,14 +743,32 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 	return result;
 }
 
-void PMXmodel::RotationMatrix(std::wstring bonename, XMFLOAT3 theta)
+void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1, const XMFLOAT4 &quat2, float pow)
 {
-	auto boneNode = _boneMap[bonename];
-	auto start = XMLoadFloat3(&boneNode.startPos);// 元の座標を入れておく
+	auto bonenode = _boneMap[bonename];
+	auto start = XMLoadFloat3(&bonenode.startPos);// 元の座標を入れておく
+	auto quaternion = XMLoadFloat4(&quat1);
+	auto quaternion2 = XMLoadFloat4(&quat2);
+
 
 	//原点まで並行移動してそこで回転を行い、元の位置まで戻す
-	_boneMats[boneNode.boneIdx] =
-		XMMatrixTranslationFromVector(XMVectorScale(start, -1))*		XMMatrixRotationX(theta.x)*		XMMatrixRotationY(theta.y)*		XMMatrixRotationZ(theta.z)*		XMMatrixTranslationFromVector(start);
+	_boneMats[bonenode.boneIdx] =
+		DirectX::XMMatrixTranslationFromVector(XMVectorScale(start, -1))*
+		XMMatrixRotationQuaternion(XMQuaternionSlerp(quaternion, quaternion2, pow))*
+		DirectX::XMMatrixTranslationFromVector(start);
+}
+
+void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1)
+{
+	auto bonenode = _boneMap[bonename];
+	auto start = XMLoadFloat3(&bonenode.startPos);// 元の座標を入れておく
+	auto quaternion = XMLoadFloat4(&quat1);
+
+	//原点まで並行移動してそこで回転を行い、元の位置まで戻す
+	_boneMats[bonenode.boneIdx] =
+		DirectX::XMMatrixTranslationFromVector(XMVectorScale(start, -1))*
+		XMMatrixRotationQuaternion(quaternion)*
+		DirectX::XMMatrixTranslationFromVector(start);
 }
 
 void PMXmodel::RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat)
@@ -758,11 +831,32 @@ void PMXmodel::UpDate(char key[256])
 		angle += 0.01f;
 	}
 
+	if(key[DIK_M] && (Oldkey[DIK_M] == 0))
+	{
+		_morphWeight = 1;
+	}
+	else if (key[DIK_N] && (Oldkey[DIK_N] == 0))
+	{
+		_morphWeight = -1;
+	}
+	else
+	{
+		_morphWeight = 0;
+	}
+
+	for (auto& md:_morphData[GetWstringFromString("え")])
+	{
+		vertexInfo[md.vertexMorph.verIdx].pos.x = vertexInfo[md.vertexMorph.verIdx].pos.x + md.vertexMorph.pos.x*_morphWeight;
+		vertexInfo[md.vertexMorph.verIdx].pos.y = vertexInfo[md.vertexMorph.verIdx].pos.y + md.vertexMorph.pos.y*_morphWeight;
+		vertexInfo[md.vertexMorph.verIdx].pos.z = vertexInfo[md.vertexMorph.verIdx].pos.z + md.vertexMorph.pos.z*_morphWeight;
+	}
+
+
 	// マテリアルカラーの転送
 	int midx = 0;
 	for (auto& mbuff : _materialsBuff) {
 
-		//auto result = mbuff->Map(0, nullptr, (void**)&MapColor);
+		mbuff->Map(0, nullptr, (void**)&MapColor);
 		MapColor->diffuse = _materials[midx].Diffuse;
 
 		MapColor->ambient = _materials[midx].Ambient;
@@ -772,24 +866,25 @@ void PMXmodel::UpDate(char key[256])
 		MapColor->specular.z = _materials[midx].Specular.z;
 		MapColor->specular.w = _materials[midx].SpecularPow;
 
-		//mbuff->Unmap(0, nullptr);
-
+		mbuff->Unmap(0, nullptr);
 		++midx;
 	}
-	
+	// モーションの更新
+	static auto lastTime = GetTickCount();
+	if (GetTickCount() - lastTime > _vmdData->Duration()*33.33333f) {
+		lastTime = GetTickCount();
+	}
 
-	// ボーん
-	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
-
-	//_boneMats[_boneMap[L"右ひじ"].boneIdx] = XMMatrixRotationZ(angle);	//_boneMats[_boneMap[L"左ひじ"].boneIdx] = XMMatrixRotationZ(angle);	RotationMatrix(L"右ひじ", DirectX::XMFLOAT3(angle, 0, 0));	RotationMatrix(L"左ひじ", DirectX::XMFLOAT3(angle, 0, 0));
-
-	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
-	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
-
-	std::copy(_boneMats.begin(), _boneMats.end(), _sendBone);
+	MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
 
 	// バッファの更新
-	//BufferUpDate();
+	BufferUpDate();
+	
+	// キーの入力
+	for (int i = 0; i < 256; ++i)
+	{
+		Oldkey[i] = key[i];
+	}
 }
 
 const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
@@ -820,6 +915,11 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
 const LPCWSTR PMXmodel::GetUseShader()
 {
 	return L"PMXShader.hlsl";
+}
+
+void PMXmodel::SetVMDFlame(unsigned int flame)
+{
+	AnimFlame = flame;
 }
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)
@@ -891,7 +991,7 @@ std::wstring PMXmodel::GetWstringFromString(const std::string& str)
 
 	// 得た文字数分のワイド文字列を作成
 	std::wstring wstr;
-	wstr.resize(num1);
+	wstr.resize(num1-1);// そのままだと一番最後に空白文字が入ってしまうためマイナス１する
 
 	//呼び出し2回目(確保済みのwstrに変換文字列をコピー)
 	auto num2 = MultiByteToWideChar(
