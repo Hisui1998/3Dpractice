@@ -19,14 +19,16 @@ struct MotionInfo {
 	DirectX::XMFLOAT4 Rotatation;// 回転
 	unsigned char Interpolation[64];// 補完
 };
-#pragma pack()
+
 
 // 表情情報
 struct MorphInfo { // 23 Bytes // 表情
 	char SkinName[15]; // 表情名
-	unsigned int FlameNo; // フレーム番号
+	unsigned int FrameNo; // フレーム番号
 	float Weight; // 表情の設定値(表情スライダーの値)
 };
+#pragma pack()
+
 
 // カメラデータ
 struct CameraData{ 
@@ -58,7 +60,8 @@ class VMDMotion
 private:
 	void LoadVMD(std::string fileName);
 
-	std::map<std::string, std::vector<MotionInfo>> _animData;
+	std::map<std::string, std::vector<MotionInfo>> _motionData;// モーションデータ
+	std::map<std::string, std::vector<MorphInfo>> _morphData;// 表情データ
 
 	int flame;
 
@@ -71,7 +74,8 @@ public:
 	VMDMotion(std::string fileName);
 	~VMDMotion();
 
-	std::map<std::string, std::vector<MotionInfo>>GetAnimData();
+	std::map<std::string, std::vector<MotionInfo>>GetMotionData();
+	std::map<std::string, std::vector<MorphInfo>>GetMorphData();
 	int Duration() { return ++flame; };
 };
 

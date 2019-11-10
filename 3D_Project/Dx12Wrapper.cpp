@@ -503,10 +503,10 @@ int Dx12Wrapper::Init()
 	isPMD = false;
 	// モデル読み込み
 	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx");
-	pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx");
+	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx");
 	pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミク.pmd");
 	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx");
-	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx");
+	pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx");
 	//pmxModel = std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx");
 
 
@@ -727,7 +727,7 @@ void Dx12Wrapper::UpDate()
 	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// モデルのマテリアル適用
-	// どのインデックスから始めるかを入れておく変数
+
 	unsigned int offset = 0;
 	auto boneheap = isPMD? pmdModel->GetBoneHeap():pmxModel->GetBoneHeap();
 	auto materialheap = isPMD ? pmdModel->GetMaterialHeap():pmxModel->GetMaterialHeap();
@@ -735,8 +735,6 @@ void Dx12Wrapper::UpDate()
 	// デスクリプターハンドル一枚のサイズ取得
 	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	
-	/*　ボーンを動かす　*/
-
 	// ハンドルの取得
 	auto bohandle = boneheap->GetGPUDescriptorHandleForHeapStart();
 
@@ -746,18 +744,13 @@ void Dx12Wrapper::UpDate()
 	// デスクリプタテーブルのセット
 	_cmdList->SetGraphicsRootDescriptorTable(2, bohandle);
 
-
-	/*　マテリアルの適用　*/
-
 	// ハンドルの取得
 	auto mathandle = materialheap->GetGPUDescriptorHandleForHeapStart();
 
 	// デスクリプタヒープのセット
 	_cmdList->SetDescriptorHeaps(1, &materialheap);
 
-
 	// 描画ループ
-
 	//for (auto& m : pmdModel->GetMaterials()) {
 	for (auto& m : pmxModel->GetMaterials()) {
 		// デスクリプタテーブルのセット

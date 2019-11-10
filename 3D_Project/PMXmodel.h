@@ -16,7 +16,7 @@ struct PMXVertexInfo {
 
 	XMFLOAT4 adduv[4];
 
-	unsigned char weight;
+	unsigned char weightType;
 
 	int boneIdx[4];
 	float boneweight[4];
@@ -168,6 +168,10 @@ private:
 
 	void MotionUpDate(int frameno);
 
+	void MorphUpDate(int frameno);
+
+	void IKBoneRecursive(int frameno);
+
 	void CreateBoneTree();
 
 	// 白テクスチャの作成
@@ -249,7 +253,6 @@ private:
 	std::string FolderPath;
 	unsigned int AnimFlame;
 	float _morphWeight;
-	char Oldkey[256];
 public:
 	PMXmodel(ID3D12Device* dev, const std::string modelPath);
 	~PMXmodel();

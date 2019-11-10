@@ -46,20 +46,20 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 		}
 
 		// weight変形形式よっみこみ
-		fread(&vi.weight, sizeof(vi.weight), 1, fp);
+		fread(&vi.weightType, sizeof(vi.weightType), 1, fp);
 
 		// 変形形式別の読み込み
-		if (vi.weight == 0)
+		if (vi.weightType == 0)
 		{
 			fread(&vi.boneIdx[0],header.data[5], 1, fp);
 		}
-		else if (vi.weight == 1)
+		else if (vi.weightType == 1)
 		{
 			fread(&vi.boneIdx[0], header.data[5], 1, fp);
 			fread(&vi.boneIdx[1], header.data[5], 1, fp);
 			fread(&vi.boneweight[0], sizeof(float), 1, fp);
 		}
-		else if (vi.weight == 2)
+		else if (vi.weightType == 2)
 		{
 			fread(&vi.boneIdx[0], header.data[5], 1, fp);
 			fread(&vi.boneIdx[1], header.data[5], 1, fp);
@@ -70,7 +70,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 			fread(&vi.boneweight[2], sizeof(float), 1, fp);
 			fread(&vi.boneweight[3], sizeof(float), 1, fp);
 		}
-		else if (vi.weight == 3)
+		else if (vi.weightType == 3)
 		{
 			fread(&vi.boneIdx[0], header.data[5], 1, fp);
 			fread(&vi.boneIdx[1], header.data[5], 1, fp);
@@ -310,13 +310,11 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 	// Vmd読み込み
 	_vmdData = std::make_shared<VMDMotion>("VMD/DanceRobotDance_Motion.vmd");
+	//_vmdData = std::make_shared<VMDMotion>("VMD/45秒MIKU.vmd");
 	//_vmdData = std::make_shared<VMDMotion>("VMD/ヤゴコロダンス.vmd");
 	AnimFlame = 0;
 	_morphWeight = 0;
-	for (auto &k: Oldkey)
-	{
-		k = 0;
-	}
+
 
 	// 各バッファの初期化
 	_materialsBuff.resize(matNum);
@@ -372,7 +370,7 @@ void PMXmodel::MotionUpDate(int frameno)
 {
 	// ボーん
 	std::fill(_boneMats.begin(), _boneMats.end(), XMMatrixIdentity());
-	for (auto& boneanim : _vmdData->GetAnimData()) {
+	for (auto& boneanim : _vmdData->GetMotionData()) {
 		auto& boneName = boneanim.first;
 		auto& keyframes = boneanim.second;
 
@@ -411,6 +409,15 @@ void PMXmodel::MotionUpDate(int frameno)
 	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
 
 	std::copy(_boneMats.begin(), _boneMats.end(), _sendBone);
+}
+
+void PMXmodel::MorphUpDate(int frameno)
+{
+}
+
+void PMXmodel::IKBoneRecursive(int frameno)
+{
+
 }
 
 PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath)
@@ -764,6 +771,8 @@ void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1
 	auto bonenode = _boneMap[bonename];
 	auto start = XMLoadFloat3(&bonenode.startPos);// 元の座標を入れておく
 	auto quaternion = XMLoadFloat4(&quat1);
+	auto bonetype = _bones[bonenode.boneIdx];
+
 
 	//原点まで並行移動してそこで回転を行い、元の位置まで戻す
 	_boneMats[bonenode.boneIdx] =
@@ -806,53 +815,6 @@ void PMXmodel::UpDate(char key[256])
 		}
 	}
 
-	if (key[DIK_T])
-	{
-		for (auto &md : _morphData[L"照れ"])
-		{
-			if (_materials[md.materialMorph.materialIdx].Diffuse.w < 1.f)
-			{
-				_materials[md.materialMorph.materialIdx].Diffuse.w += 0.1f;
-			}
-		}
-	}
-	else
-	{
-		for (auto &md : _morphData[L"照れ"])
-		{
-			if (_materials[md.materialMorph.materialIdx].Diffuse.w > 0.f)
-			{
-				_materials[md.materialMorph.materialIdx].Diffuse.w -= 0.1f;
-			}
-		}
-	}
-
-	if (key[DIK_H])
-	{
-		angle += 0.01f;
-	}
-
-	if(key[DIK_M] && (Oldkey[DIK_M] == 0))
-	{
-		_morphWeight = 1;
-	}
-	else if (key[DIK_N] && (Oldkey[DIK_N] == 0))
-	{
-		_morphWeight = -1;
-	}
-	else
-	{
-		_morphWeight = 0;
-	}
-
-	for (auto& md:_morphData[GetWstringFromString("え")])
-	{
-		vertexInfo[md.vertexMorph.verIdx].pos.x = vertexInfo[md.vertexMorph.verIdx].pos.x + md.vertexMorph.pos.x*_morphWeight;
-		vertexInfo[md.vertexMorph.verIdx].pos.y = vertexInfo[md.vertexMorph.verIdx].pos.y + md.vertexMorph.pos.y*_morphWeight;
-		vertexInfo[md.vertexMorph.verIdx].pos.z = vertexInfo[md.vertexMorph.verIdx].pos.z + md.vertexMorph.pos.z*_morphWeight;
-	}
-
-
 	// マテリアルカラーの転送
 	int midx = 0;
 	for (auto& mbuff : _materialsBuff) {
@@ -872,20 +834,14 @@ void PMXmodel::UpDate(char key[256])
 	}
 	// モーションの更新
 	static auto lastTime = GetTickCount();
-	if (GetTickCount() - lastTime > _vmdData->Duration()*33.33333f) {
+	if (GetTickCount() - lastTime > _vmdData->Duration()*33.33333f) 
+	{
 		lastTime = GetTickCount();
 	}
-
 	MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
-
+	MorphUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
 	// バッファの更新
 	BufferUpDate();
-	
-	// キーの入力
-	for (int i = 0; i < 256; ++i)
-	{
-		Oldkey[i] = key[i];
-	}
 }
 
 const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
