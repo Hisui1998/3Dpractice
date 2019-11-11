@@ -334,7 +334,6 @@ HRESULT Dx12Wrapper::CreateGraphicsPipelineState()
 	return result;
 }
 
-
 HRESULT Dx12Wrapper::CreateConstantBuffer()
 {
 	// コンスタン十バッファ用のヒーププロップ
@@ -402,6 +401,63 @@ HRESULT Dx12Wrapper::CreateConstantBuffer()
 	_dev->CreateConstantBufferView(&cbvDesc, handle);
 
 	return result;
+}
+
+HRESULT Dx12Wrapper::CreateHeapAndView()
+{
+	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
+	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	descHeapDesc.NodeMask = 0;
+	descHeapDesc.NumDescriptors = 1;
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+
+	// レンダーターゲットデスクリプタヒープの作成
+	auto result = _dev->CreateDescriptorHeap(&descHeapDesc,IID_PPV_ARGS(&_rtvDescHeap));
+	   
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;// タイプ変更
+
+	// シェーダーリソースデスクリプタヒープの作成
+	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_srvDescHeap));
+
+	// リソースの作成
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Width = Application::Instance().GetWindowSize().width;
+	desc.Height = Application::Instance().GetWindowSize().height;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.DepthOrArraySize = 1;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+	desc.MipLevels = 1;
+
+
+	result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
+		&desc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&_maltiBuffer));
+
+
+	// レンダーターゲットビューの作成
+	_dev->CreateRenderTargetView(_maltiBuffer, nullptr, _rtvDescHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// シェーダーリソースビューの作成
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = desc.Format;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+
+	_dev->CreateShaderResourceView(_maltiBuffer, &srvDesc, _srvDescHeap->GetCPUDescriptorHandleForHeapStart());
+	return result;
+}
+
+HRESULT Dx12Wrapper::CreatePolygon()
+{
+
 }
 
 HRESULT Dx12Wrapper::CreateDSV()
@@ -513,6 +569,9 @@ int Dx12Wrapper::Init()
 	// スワップチェインの生成
 	if (FAILED(CreateSwapChainAndCmdQue())) 
 		return 2;
+
+	if (FAILED(CreateHeapAndView()))
+		return 10;
 
 	// コマンド系の生成
 	if (FAILED(CreateCmdListAndAlloc())) 
@@ -709,7 +768,14 @@ void Dx12Wrapper::UpDate()
 	_cmdList->ResourceBarrier(1, &BarrierDesc);
 
 	//レンダーターゲット設定
-	_cmdList->OMSetRenderTargets(1, &heapStart, false, &_dsvDescHeap->GetCPUDescriptorHandleForHeapStart());
+	//_cmdList->OMSetRenderTargets(1, &heapStart, false, &_dsvDescHeap->GetCPUDescriptorHandleForHeapStart());
+	_cmdList->OMSetRenderTargets(
+		1,
+		&_rtvDescHeap->GetCPUDescriptorHandleForHeapStart(),
+		false,
+		&_dsvDescHeap->GetCPUDescriptorHandleForHeapStart()
+	);
+
 
 	//クリア
 	_cmdList->ClearRenderTargetView(heapStart, clearColor, 0, nullptr);
@@ -731,26 +797,23 @@ void Dx12Wrapper::UpDate()
 	unsigned int offset = 0;
 	auto boneheap = isPMD? pmdModel->GetBoneHeap():pmxModel->GetBoneHeap();
 	auto materialheap = isPMD ? pmdModel->GetMaterialHeap():pmxModel->GetMaterialHeap();
-
-	// デスクリプターハンドル一枚のサイズ取得
-	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	
-	// ハンドルの取得
-	auto bohandle = boneheap->GetGPUDescriptorHandleForHeapStart();
-
 	// デスクリプタヒープのセット
 	_cmdList->SetDescriptorHeaps(1, &boneheap);
 
 	// デスクリプタテーブルのセット
+	auto bohandle = boneheap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetGraphicsRootDescriptorTable(2, bohandle);
-
-	// ハンドルの取得
-	auto mathandle = materialheap->GetGPUDescriptorHandleForHeapStart();
 
 	// デスクリプタヒープのセット
 	_cmdList->SetDescriptorHeaps(1, &materialheap);
 
 	// 描画ループ
+	auto mathandle = materialheap->GetGPUDescriptorHandleForHeapStart();
+
+	// デスクリプターハンドル一枚のサイズ取得
+	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	
 	//for (auto& m : pmdModel->GetMaterials()) {
 	for (auto& m : pmxModel->GetMaterials()) {
 		// デスクリプタテーブルのセット

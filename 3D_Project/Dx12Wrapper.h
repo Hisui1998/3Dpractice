@@ -40,16 +40,23 @@ private:
 	UINT64 _fenceValue = 0;
 
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ
+	
 	ID3D12DescriptorHeap* _rtvDescHeap = nullptr;// RTV(レンダーターゲット)デスクリプタヒープ
+	
+	ID3D12DescriptorHeap* _srvDescHeap = nullptr;// シェーダーリソースデスクリプタヒープ
+	
+	ID3D12Resource* _maltiBuffer = nullptr;// バッファ
+
 	ID3D12DescriptorHeap* _dsvDescHeap;// DSV(深度)デスクリプタヒープ
-	ID3D12DescriptorHeap* _depthSrvHeap;// 深度シェーダーリソースビューヒープ
-	ID3D12DescriptorHeap* _srvDescHeap;// その他(テクスチャ、定数)デスクリプタヒープ
-	ID3D12DescriptorHeap* _rgstDescHeap;
+	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
+
+	ID3D12DescriptorHeap* _rgstDescHeap;// レジスタデスクリプタヒープ
 
 	std::vector<ID3D12Resource*>renderTargets;
-
+	   
 	ID3D12Resource* _constBuff = nullptr;// 定数バッファ
-	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
+
+	ID3D12Resource* _peraVertBuff = nullptr;// ぺらポリバッファ
 
 	ID3DBlob* vertexShader = nullptr;
 	ID3DBlob* pixelShader = nullptr;
@@ -85,7 +92,13 @@ private:
 	// 定数バッファの作成
 	HRESULT CreateConstantBuffer();
 
-	// ---その他関数--- //
+	// ヒープとビューの作成
+	HRESULT CreateHeapAndView();
+
+	// ぺらぽりの作成
+	HRESULT CreatePolygon();
+	
+
 	// シェーダーのよみこみを行う関数
 	HRESULT LoadShader();
 	
