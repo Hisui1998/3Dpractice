@@ -20,6 +20,13 @@ struct WVPMatrix {
 	DirectX::XMMATRIX lvp;
 };
 
+// 頂点情報
+struct Vertex
+{
+	DirectX::XMFLOAT3 pos;
+	DirectX::XMFLOAT2 uv;
+};
+
 class Dx12Wrapper
 {
 private:
@@ -50,16 +57,26 @@ private:
 	ID3D12DescriptorHeap* _dsvDescHeap;// DSV(深度)デスクリプタヒープ
 	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
 
-	ID3D12DescriptorHeap* _rgstDescHeap;// レジスタデスクリプタヒープ
+	ID3D12DescriptorHeap* _constantDescHeap;// レジスタデスクリプタヒープ
 
 	std::vector<ID3D12Resource*>renderTargets;
 	   
 	ID3D12Resource* _constBuff = nullptr;// 定数バッファ
 
 	ID3D12Resource* _peraVertBuff = nullptr;// ぺらポリバッファ
+	D3D12_VERTEX_BUFFER_VIEW _peravbView = {};// 頂点バッファビュー
 
 	ID3DBlob* vertexShader = nullptr;
 	ID3DBlob* pixelShader = nullptr;
+
+	D3D12_VIEWPORT _viewPort;
+	D3D12_RECT _scissorRect;
+
+
+	ID3DBlob* peraVertShader = nullptr;
+	ID3DBlob* peraPixShader = nullptr;
+	ID3D12PipelineState* _peraPipeline = nullptr;
+	ID3D12RootSignature* _peraSignature = nullptr;
 
 	ID3D12RootSignature* _rootSignature = nullptr;
 	ID3DBlob* signature = nullptr;
@@ -80,11 +97,15 @@ private:
 	// ルートシグネチャを作る関数(レンジとパラメータもこの中)
 	HRESULT CreateRootSignature();
 
+	HRESULT CreatePeraRootSignature();
+
 	// フェンスの作成
 	HRESULT CreateFence();
 
 	// パイプラインを作る関数(頂点レイアウトの設定はこの中)
 	HRESULT CreateGraphicsPipelineState();
+
+	HRESULT CreatePeraPopelineState();
 
 	// 深度バッファと深度バッファビューを作る関数
 	HRESULT CreateDSV();
@@ -97,7 +118,8 @@ private:
 
 	// ぺらぽりの作成
 	HRESULT CreatePolygon();
-	
+
+	void DrawPolygon();
 
 	// シェーダーのよみこみを行う関数
 	HRESULT LoadShader();

@@ -80,7 +80,7 @@ void Application::Run()
 		if (msg.message == WM_QUIT) {// 終了
 			break;
 		}
-		_dx12->UpDate();// 画面のスワップ
+		_dx12->UpDate();// 描画
 	}
 }
 

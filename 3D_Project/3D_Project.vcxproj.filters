@@ -54,5 +54,6 @@
   <ItemGroup>
     <FxCompile Include="PMXShader.hlsl" />
     <FxCompile Include="PMDShader.hlsl" />
+    <FxCompile Include="PeraShader.hlsl" />
   </ItemGroup>
 </Project>

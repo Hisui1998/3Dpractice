@@ -77,11 +77,10 @@ Out vs(
 {
     Out o;
 	matrix m = boneMats[boneno.x];// ウェイト1.0の固定値
-	
     if (weighttype == 1)
     {
-        m = 
-        boneMats[boneno.x] * float(weight.x) + 
+        m =
+        boneMats[boneno.x] * float(weight.x) +
         boneMats[boneno.y] * (1.0f - float(weight.x));
     }
     else if (weighttype == 2)
@@ -93,9 +92,9 @@ Out vs(
         boneMats[boneno.w] * float(weight.w);
     }
 	else if (weighttype == 3)
-	{
-        m = 
-        boneMats[boneno.x] * float(weight.x) + 
+    {
+        m =
+        boneMats[boneno.x] * float(weight.x) +
         boneMats[boneno.y] * (1.0f - float(weight.x));
     }
 
@@ -118,6 +117,7 @@ Out vs(
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
 {
+    //return float4(o.weight.rgb,1);
     // 視線ベクトル
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;

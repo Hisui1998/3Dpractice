@@ -87,9 +87,9 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	int indexNum = 0;
 	fread(&indexNum, sizeof(indexNum), 1, fp);
 	_verindex.resize(indexNum);
-	for (int i= 0;i< indexNum;++i)
+	for (auto& vi: _verindex)
 	{
-		fread(&_verindex[i], header.data[2], 1, fp);
+		fread(&vi, header.data[2], 1, fp);
 	}
 
 	// テクスチャ読み込み
@@ -712,7 +712,6 @@ void PMXmodel::CreateBoneTree()
 		auto parentName = _bones[_bones[b.second.boneIdx].parentboneIndex].name;
 			_boneMap[parentName].children.push_back(&b.second);
 	}
-
 }
 
 HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
