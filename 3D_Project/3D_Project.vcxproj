@@ -127,6 +127,7 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="PMDmodel.cpp" />
     <ClCompile Include="PMXmodel.cpp" />
+    <ClCompile Include="Polygon.cpp" />
     <ClCompile Include="VMDMotion.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -134,6 +135,7 @@
     <ClInclude Include="Dx12Wrapper.h" />
     <ClInclude Include="PMDmodel.h" />
     <ClInclude Include="PMXmodel.h" />
+    <ClInclude Include="Polygon.h" />
     <ClInclude Include="VMDMotion.h" />
   </ItemGroup>
   <ItemGroup>

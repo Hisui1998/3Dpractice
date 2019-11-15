@@ -28,8 +28,8 @@ float4 peraPS(Out o) : SV_Target
 {
     float w, h, level;
     tex.GetDimensions(0, w, h, level);
-    float dx = 1.0f / w;
-    float dy = 1.0f / h;
+    float dx = 0.5f / w;
+    float dy = 0.5f / h;
     float4 ret = tex.Sample(smp, o.uv);
     ret = ret * 4 -
     tex.Sample(smp, o.uv + float2(-dx, 0)) -
@@ -38,5 +38,12 @@ float4 peraPS(Out o) : SV_Target
     tex.Sample(smp, o.uv + float2(0, -dy));
     float b = dot(float3(0.3f, 0.3f, 0.4f), 1 - ret.rgb);
     b = pow(b, 4);
+
+    //return float4(
+    //tex.Sample(smp, o.uv + float2(dx*-5, 0)).r,
+    //tex.Sample(smp, o.uv + float2(dx* 5, 0)).g,
+    //tex.Sample(smp, o.uv).ba
+    //);
+
     return float4(float4(b, b, b, 1) * tex.Sample(smp, o.uv));
 }

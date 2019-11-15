@@ -162,7 +162,9 @@ struct PMXColor
 class PMXmodel
 {
 private:
-	void LoadModel(ID3D12Device* _dev, const std::string modelPath);
+	ID3D12Device* _dev;
+
+	void LoadModel(const std::string modelPath,const std::string vmdPath);
 
 	void BufferUpDate();
 
@@ -174,27 +176,31 @@ private:
 
 	void CreateBoneTree();
 
+	// パイプラインの生成
+	HRESULT CreatePipeline();
+
+	// ルートシグネチャの生成
+	HRESULT CreateRootSignature();
+
 	// 白テクスチャの作成
-	HRESULT CreateWhiteTexture(ID3D12Device* _dev);
+	HRESULT CreateWhiteTexture();
 
 	// 黒テクスチャの作成
-	HRESULT CreateBlackTexture(ID3D12Device* _dev);
+	HRESULT CreateBlackTexture();
 	
-	HRESULT CreateVertexBuffer(ID3D12Device* _dev);
+	HRESULT CreateVertexBuffer();
 
-	HRESULT CreateIndexBuffer(ID3D12Device* _dev);
+	HRESULT CreateIndexBuffer();
 
-	HRESULT CreateMaterialBuffer(ID3D12Device* _dev);
+	HRESULT CreateMaterialBuffer();
 
-	HRESULT CreateBoneBuffer(ID3D12Device* _dev);
+	HRESULT CreateBoneBuffer();
 
 	std::wstring GetWstringFromString(const std::string& str);
 
-	ID3D12Resource* LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev);
+	ID3D12Resource* LoadTextureFromFile(std::string & texPath);
 
-	HRESULT CreateGrayGradationTexture(ID3D12Device* _dev);
-
-	void CreateBoneOrder(PMXBoneNode& node,int level);
+	HRESULT CreateGrayGradationTexture();
 
 	void RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1);
 	void RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1, const XMFLOAT4 &quat2, float pow = 0.0f);
@@ -203,15 +209,22 @@ private:
 
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
-	std::shared_ptr<VMDMotion> vmdData;
+	ID3D12PipelineState* _pmxPipeline=nullptr;// PMX描画用パイプライン
+	ID3D12RootSignature* _pmxSignature =nullptr;// PMX描画用ルートシグネチャ
 
-	std::map<std::wstring, MorphHeader> _morphHeaders;// もーふの名前からもーふのヘッダー情報をとってくる
-	std::map<std::wstring, std::vector<MorphOffsets>> _morphData;// もーふの名前からもーふ情報をとってくる
+	D3D12_VIEWPORT _viewPort;// ビューポート
+	D3D12_RECT _scissor;// シザー範囲
 
-	std::vector<PMXVertexInfo> vertexInfo;
-	std::vector<unsigned int> _verindex;
-	std::vector<std::string>_texVec;
-	std::vector<PMXMaterial> _materials;
+	std::shared_ptr<VMDMotion>_vmdData;// VMDのデータを格納しているポインタ
+
+	std::map<std::wstring, MorphHeader> _morphHeaders;// モーフ名からモーフのカテゴリ等のヘッダ情報が取得できる(需要低め)
+	std::map<std::wstring, std::vector<MorphOffsets>> _morphData;// モーフ名からモーフ情報が取得できる(ヘッダ情報からモーフ種類を取得して使う)
+
+	std::vector<PMXVertexInfo> vertexInfo;// 頂点情報が入っている配列
+	std::vector<unsigned int> _verindex;// 頂点インデックス情報が入っている
+	std::vector<std::string>_texturePaths;// テクスチャのパスを格納している配列
+	std::vector<PMXMaterial> _materials;// マテリアル情報が入っている配列
+	PMXColor* MapColor = nullptr;// マテリアルのカラー情報を入れて転送する用のポインタ(中身確認用かも)
 
 	// 頂点バッファ
 	ID3D12Resource* _vertexBuffer = nullptr;
@@ -226,47 +239,45 @@ private:
 	ID3D12Resource* blackTex = nullptr;
 	ID3D12Resource* gradTex = nullptr;
 
+	// テクスチャ系バッファ配列
+	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ配列
+	std::vector<ID3D12Resource*> _sphBuffer;// 乗算スフィアマップバッファ配列
+	std::vector<ID3D12Resource*> _spaBuffer;// 加算スフィアマップバッファ配列
+	std::vector<ID3D12Resource*> _toonResources;// トゥーンバッファ配列
 
-	ID3D12Resource* _boneBuffer;// ボーンバッファ
-	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ
-	std::vector<ID3D12Resource*> _sphBuffer;// 乗算スフィアマップ
-	std::vector<ID3D12Resource*> _spaBuffer;// 加算スフィアマップ
-	std::vector<ID3D12Resource*> _toonResources;// トゥーン
-	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ(複数あるのでベクターにしている)
-
-	std::shared_ptr<VMDMotion>_vmdData;
-
-	std::vector<int>_orderMoveIdx;// 動かす順番にボーンインデックスを入れる（仮）
-
-	std::vector<BoneInfo>_bones;
-	std::map<std::wstring, PMXBoneNode> _boneMap;//ボーンマップ
-	std::vector<XMMATRIX>_boneMats;
-	XMMATRIX* _sendBone = nullptr;// 転送用
-
-	float angle = 0;
-
-	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
+	// マテリアル
+	std::vector<ID3D12Resource*> _materialsBuff;// マテリアルバッファ
 	ID3D12DescriptorHeap* _matDescHeap;// マテリアルデスクリプタヒープ
 
-	PMXColor* MapColor = nullptr;
+	// ボーン系の変数
+	ID3D12Resource* _boneBuffer;// ボーンバッファ
+	std::vector<BoneInfo>_bones;// ボーンの基本情報が入ってる
+	std::map<std::wstring, PMXBoneNode> _boneTree;//ボーン名から子のノードを取得できる
+	std::vector<XMMATRIX>_boneMats;// ボーン行列(中身はボーンインデックス順)
+	XMMATRIX* _sendBone = nullptr;// ボーン行列の転送用ポインタ
 
-	std::string FolderPath;
-	unsigned int AnimFlame;
-	float _morphWeight;
+	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
+
+	std::string FolderPath;// モデルが入っているフォルダまでのパス
+
+	float _morphWeight;// もーふのウェイト(テスト用)
+	static int modelNum;
 public:
-	PMXmodel(ID3D12Device* dev, const std::string modelPath);
+	PMXmodel(ID3D12Device* dev, const std::string modelPath,const std::string vmdPath = "");
 	~PMXmodel();
 
 	void UpDate(char key[256]);
+	// 描画関数(リストと深度バッファヒープ位置とWVP定数バッファ)
+	void Draw(ID3D12GraphicsCommandList* list,D3D12_CPU_DESCRIPTOR_HANDLE dsvStart,ID3D12DescriptorHeap* constant);
+
 	std::vector<PMXMaterial> GetMaterials() { return _materials; };
 
 	const std::vector<D3D12_INPUT_ELEMENT_DESC> GetInputLayout();
+	const XMFLOAT3 GetPos();
 
 	D3D12_VERTEX_BUFFER_VIEW GetVertexView() { return _vbView; };
 	D3D12_INDEX_BUFFER_VIEW GetIndexView() { return _idxView; };
 	const LPCWSTR GetUseShader();
 	ID3D12DescriptorHeap*& GetBoneHeap() { return _boneHeap; };
 	ID3D12DescriptorHeap*& GetMaterialHeap() { return _matDescHeap; };
-
-	void SetVMDFlame(unsigned int flame);
 };

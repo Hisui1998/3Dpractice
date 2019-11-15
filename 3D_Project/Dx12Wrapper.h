@@ -31,58 +31,68 @@ class Dx12Wrapper
 {
 private:
 	//  ---デバイス系変数---  //
-	HWND _hwnd;
-	IDXGIFactory6* _dxgi = nullptr;
-	IDXGISwapChain4* _swapchain = nullptr;
-	ID3D12Device* _dev = nullptr;
-	ID3D12Device* _keydev = nullptr;
-	ID3D12CommandAllocator* _cmdAlloc = nullptr;
-	ID3D12GraphicsCommandList* _cmdList = nullptr;
-	ID3D12CommandQueue* _cmdQue = nullptr;
+	HWND _hwnd;// ウィンドウハンドル
+
+	IDXGIFactory6* _dxgi = nullptr;// ファクトリ
+
+	IDXGISwapChain4* _swapchain = nullptr;// スワップチェイン
+
+	ID3D12Device* _dev = nullptr;// デバイス
+	ID3D12Device* _keydev = nullptr;// キーボードデバイス
+
+	// コマンド系
+	ID3D12CommandAllocator* _cmdAlloc = nullptr;// コマンドアロケータ
+	ID3D12GraphicsCommandList* _cmdList = nullptr;// コマンドリスト
+	ID3D12CommandQueue* _cmdQue = nullptr;// コマンドキュー
 
 	LPDIRECTINPUT8       _directInput;// DirectInput本体
 	LPDIRECTINPUTDEVICE8 _keyBoadDev;// キーボードデバイス
 
-	ID3D12Fence* _fence = nullptr;
-	UINT64 _fenceValue = 0;
-
-	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ
-	
-	ID3D12DescriptorHeap* _rtvDescHeap = nullptr;// RTV(レンダーターゲット)デスクリプタヒープ
-	
-	ID3D12DescriptorHeap* _srvDescHeap = nullptr;// シェーダーリソースデスクリプタヒープ
-	
-	ID3D12Resource* _maltiBuffer = nullptr;// バッファ
+	ID3D12Fence* _fence = nullptr;// フェンス
+	UINT64 _fenceValue = 0;// フェンス値
 
 	ID3D12DescriptorHeap* _dsvDescHeap;// DSV(深度)デスクリプタヒープ
 	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
 
-	ID3D12DescriptorHeap* _constantDescHeap;// レジスタデスクリプタヒープ
+	ID3D12DescriptorHeap* _cameraDescHeap;// カメラ用の定数バッファ用デスクリプタヒープ
+	ID3D12Resource* _cameraBuff = nullptr;// カメラ用の定数バッファ
 
-	std::vector<ID3D12Resource*>renderTargets;
-	   
-	ID3D12Resource* _constBuff = nullptr;// 定数バッファ
+	D3D12_VIEWPORT _viewPort;// ビューポート
+	D3D12_RECT _scissor;// シザー範囲
 
-	ID3D12Resource* _peraVertBuff = nullptr;// ぺらポリバッファ
-	D3D12_VERTEX_BUFFER_VIEW _peravbView = {};// 頂点バッファビュー
+	// ペラポリ用
+	ID3D12Resource* _peraBuffer = nullptr;// ペラポリ本体のバッファ
+	ID3D12Resource* _peraBuffer2 = nullptr;// ペラポリ2本体のバッファ
 
-	ID3DBlob* vertexShader = nullptr;
-	ID3DBlob* pixelShader = nullptr;
+	ID3D12Resource* _peraVertBuff = nullptr;// ペラポリ用頂点バッファ
+	D3D12_VERTEX_BUFFER_VIEW _peravbView = {};// ペラポリ用頂点バッファビュー
 
-	D3D12_VIEWPORT _viewPort;
-	D3D12_RECT _scissorRect;
+	ID3D12DescriptorHeap* _rtvDescHeap = nullptr;// ペラポリ用レンダーターゲットデスクリプタヒープ	
+	ID3D12DescriptorHeap* _rtvDescHeap2 = nullptr;// ペラポリ2用レンダーターゲットデスクリプタヒープ	
+	ID3D12DescriptorHeap* _srvDescHeap = nullptr;// ペラポリ用シェーダーリソースデスクリプタヒープ
+	ID3D12DescriptorHeap* _srvDescHeap2 = nullptr;// ペラポリ2用シェーダーリソースデスクリプタヒープ
 
+	ID3DBlob* peraVertShader = nullptr;// ペラポリ用頂点シェーダ
+	ID3DBlob* peraVertShader2 = nullptr;// ペラポリ2用頂点シェーダ
+	ID3DBlob* peraPixShader = nullptr;// ペラポリ用ピクセルシェーダ
+	ID3DBlob* peraPixShader2 = nullptr;// ペラポリ2用ピクセルシェーダ
 
-	ID3DBlob* peraVertShader = nullptr;
-	ID3DBlob* peraPixShader = nullptr;
-	ID3D12PipelineState* _peraPipeline = nullptr;
-	ID3D12RootSignature* _peraSignature = nullptr;
+	ID3D12PipelineState* _peraPipeline = nullptr;// ペラポリ用パイプライン
+	ID3D12RootSignature* _peraSignature = nullptr;// ペラポリ用ルートシグネチャ
+	
+
+	// スワップチェイン用
+	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ		
 
 	ID3D12RootSignature* _rootSignature = nullptr;
 	ID3DBlob* signature = nullptr;
 	ID3DBlob* error = nullptr;
 
 	ID3D12PipelineState* _pipelineState = nullptr;
+	std::vector<ID3D12Resource*>renderTargets;
+
+	ID3DBlob* vertexShader = nullptr;// 頂点シェーダ
+	ID3DBlob* pixelShader = nullptr;// ピクセルシェーダ
 
 	/*　作成と初期化系関数　*/
 	// デバイスの初期化
@@ -138,12 +148,13 @@ private:
 	int cnt = 0;
 	char key[256] = {};
 
-	DirectX::XMFLOAT3 eye;
-	DirectX::XMFLOAT3 target;
-	DirectX::XMFLOAT3 up;
+	// カメラ用
+	DirectX::XMFLOAT3 eye;// カメラの座標
+	DirectX::XMFLOAT3 target;// ターゲットの座標
+	DirectX::XMFLOAT3 up;// 方向
 
 	std::shared_ptr<PMDmodel> pmdModel;
-	std::shared_ptr<PMXmodel> pmxModel;
+	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
 	bool isPMD = false;
 public:
 	Dx12Wrapper(HWND hwnd);
@@ -155,4 +166,3 @@ public:
 	// 更新
 	void UpDate();
 };
-

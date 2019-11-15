@@ -7,14 +7,16 @@
 #include <d3dcompiler.h>
 #include <DirectXTex.h>
 #include "VMDMotion.h"
+#include "Application.h"
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib,"DirectXTex.lib")
 
+int PMXmodel::modelNum = 0;
 
-void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
+void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 {
 	FILE*fp;
 	std::string ModelPath = modelPath;
@@ -95,7 +97,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	// テクスチャ読み込み
 	int texNum = 0;
 	fread(&texNum, sizeof(texNum), 1, fp);
-	_texVec.resize(texNum);
+	_texturePaths.resize(texNum);
 	for (int i = 0; i < texNum; ++i)
 	{
 		std::string str;
@@ -107,7 +109,7 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 			fread(&c, sizeof(wchar_t), 1, fp);
 			str.push_back(c);
 		}
-		_texVec[i] = str;
+		_texturePaths[i] = str;
 	}
 
 	// マテリアル読み込み
@@ -308,13 +310,16 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 
 	fclose(fp);
 
-	// Vmd読み込み
-	_vmdData = std::make_shared<VMDMotion>("VMD/DanceRobotDance_Motion.vmd");
-	//_vmdData = std::make_shared<VMDMotion>("VMD/swing2.vmd");
-	//_vmdData = std::make_shared<VMDMotion>("VMD/45秒MIKU.vmd");
-	//_vmdData = std::make_shared<VMDMotion>("VMD/ヤゴコロダンス.vmd");
-	AnimFlame = 0;
-	_morphWeight = 0;
+	if (vmdPath != "")
+	{
+		// Vmd読み込み
+		//_vmdData = std::make_shared<VMDMotion>("VMD/DanceRobotDance_Motion.vmd");
+		//_vmdData = std::make_shared<VMDMotion>("VMD/swing2.vmd");
+		_vmdData = std::make_shared<VMDMotion>(vmdPath);
+		//_vmdData = std::make_shared<VMDMotion>("VMD/ヤゴコロダンス.vmd");
+		//_vmdData = std::make_shared<VMDMotion>("VMD/45秒MIKU.vmd");
+		_morphWeight = 0;
+	}
 
 
 	// 各バッファの初期化
@@ -328,27 +333,31 @@ void PMXmodel::LoadModel(ID3D12Device* _dev, const std::string modelPath)
 	{
 		if (_materials[i].texIndex != 255)
 		{
-			auto str = FolderPath + _texVec[_materials[i].texIndex];
-			_textureBuffer[i] = LoadTextureFromFile(str, _dev);
+			auto str = FolderPath + _texturePaths[_materials[i].texIndex];
+			_textureBuffer[i] = LoadTextureFromFile(str);
 		}
 	}
 
-	auto result = CreateVertexBuffer(_dev);
+	auto result = CreateRootSignature();
 
-	result = CreateIndexBuffer(_dev);
+	result = CreatePipeline();
+
+	result = CreateVertexBuffer();
+
+	result = CreateIndexBuffer();
 
 	// しろてくすちゃつくる
-	result = CreateWhiteTexture(_dev);
+	result = CreateWhiteTexture();
 	// くろてくすちゃつくる
-	result = CreateBlackTexture(_dev);
+	result = CreateBlackTexture();
 	// グラデーションテクスチャつくる
-	result = CreateGrayGradationTexture(_dev);
+	result = CreateGrayGradationTexture();
 
-	result = CreateMaterialBuffer(_dev);
+	result = CreateMaterialBuffer();
 
 	CreateBoneTree();
 
-	result = CreateBoneBuffer(_dev);
+	result = CreateBoneBuffer();
 
 }
 
@@ -388,8 +397,10 @@ void PMXmodel::MotionUpDate(int frameno)
 			RotationMatrix(GetWstringFromString(boneName), frameIt->Rotatation);
 			
 			// 座標移動
-			_boneMats[_boneMap[GetWstringFromString(boneName)].boneIdx]
+			_boneMats[_boneTree[GetWstringFromString(boneName)].boneIdx]
 				*= DirectX::XMMatrixTranslationFromVector(XMLoadFloat3(&frameIt->Location));
+			
+			_bones[_boneTree[GetWstringFromString(boneName)].boneIdx].pos = frameIt->Location;
 		}
 		else
 		{
@@ -400,14 +411,16 @@ void PMXmodel::MotionUpDate(int frameno)
 			RotationMatrix(GetWstringFromString(boneName), frameIt->Rotatation, nextIt->Rotatation, pow);
 
 			// 座標移動
-			_boneMats[_boneMap[GetWstringFromString(boneName)].boneIdx]
-				*= DirectX::XMMatrixTranslationFromVector(XMVectorLerp(XMLoadFloat3(&frameIt->Location),XMLoadFloat3(&nextIt->Location), pow));			
+			_boneMats[_boneTree[GetWstringFromString(boneName)].boneIdx]
+				*= DirectX::XMMatrixTranslationFromVector(XMVectorLerp(XMLoadFloat3(&frameIt->Location),XMLoadFloat3(&nextIt->Location), pow));
+			
+			 XMStoreFloat3(&_bones[_boneTree[GetWstringFromString(boneName)].boneIdx].pos,XMVectorLerp(XMLoadFloat3(&frameIt->Location), XMLoadFloat3(&nextIt->Location), pow));
 		}
 	}
 
 	// ツリーのトラバース
 	DirectX::XMMATRIX rootmat = DirectX::XMMatrixIdentity();
-	RecursiveMatrixMultiply(_boneMap[L"センター"], rootmat);
+	RecursiveMatrixMultiply(_boneTree[L"センター"], rootmat);
 
 	std::copy(_boneMats.begin(), _boneMats.end(), _sendBone);
 }
@@ -421,17 +434,19 @@ void PMXmodel::IKBoneRecursive(int frameno)
 
 }
 
-PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath)
+PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath, const std::string vmdPath):_dev(dev)
 {
-	LoadModel(dev,modelPath);
+	modelNum++;
+	LoadModel(modelPath, vmdPath);
 }
 
 
 PMXmodel::~PMXmodel()
 {
+
 }
 
-HRESULT PMXmodel::CreateWhiteTexture(ID3D12Device* _dev)
+HRESULT PMXmodel::CreateWhiteTexture()
 {
 	// 白バッファ用のデータ配列
 	std::vector<unsigned char> data(4 * 4 * 4);
@@ -465,7 +480,7 @@ HRESULT PMXmodel::CreateWhiteTexture(ID3D12Device* _dev)
 	return result;
 }
 
-HRESULT PMXmodel::CreateBlackTexture(ID3D12Device* _dev)
+HRESULT PMXmodel::CreateBlackTexture()
 {
 	// 黒バッファ用のデータ配列
 	std::vector<unsigned char> data(4 * 4 * 4);
@@ -499,7 +514,7 @@ HRESULT PMXmodel::CreateBlackTexture(ID3D12Device* _dev)
 	return result;
 }
 
-HRESULT PMXmodel::CreateVertexBuffer(ID3D12Device * _dev)
+HRESULT PMXmodel::CreateVertexBuffer()
 {
 	// ヒープの情報設定
 	D3D12_HEAP_PROPERTIES heapprop = {};
@@ -530,7 +545,7 @@ HRESULT PMXmodel::CreateVertexBuffer(ID3D12Device * _dev)
 	return result;
 }
 
-HRESULT PMXmodel::CreateIndexBuffer(ID3D12Device * _dev)
+HRESULT PMXmodel::CreateIndexBuffer()
 {
 	// ヒープの情報設定
 	D3D12_HEAP_PROPERTIES heapprop = {};
@@ -560,7 +575,7 @@ HRESULT PMXmodel::CreateIndexBuffer(ID3D12Device * _dev)
 	return result;
 }
 
-HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
+HRESULT PMXmodel::CreateMaterialBuffer()
 {
 	D3D12_DESCRIPTOR_HEAP_DESC matDescHeap = {};
 	matDescHeap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -627,12 +642,12 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 			if (_materials[i].toonIndex!=255)
 			{
 				toonFilePath = FolderPath;
-				sprintf_s(toonFileName, _texVec[_materials[i].toonIndex].c_str());
+				sprintf_s(toonFileName, _texturePaths[_materials[i].toonIndex].c_str());
 			}
 		}
 
 		toonFilePath += toonFileName;
-		_toonResources[i] = LoadTextureFromFile(toonFilePath, _dev);
+		_toonResources[i] = LoadTextureFromFile(toonFilePath);
 
 		// 定数バッファの作成
 		matDesc.BufferLocation = _materialsBuff[i]->GetGPUVirtualAddress();
@@ -686,7 +701,6 @@ HRESULT PMXmodel::CreateMaterialBuffer(ID3D12Device* _dev)
 			_dev->CreateShaderResourceView(_toonResources[i], &srvDesc, matHandle);
 		}
 		matHandle.ptr += addsize;
-
 	}
 
 	return result;
@@ -698,23 +712,192 @@ void PMXmodel::CreateBoneTree()
 	// 単位行列で初期化
 	std::fill(_boneMats.begin(), _boneMats.end(), DirectX::XMMatrixIdentity());
 	
+	// 自分のデータを入れる
 	for (int idx = 0; idx < _bones.size(); ++idx) {
-		auto& b = _bones[idx];
-		auto& boneNode = _boneMap[b.name];
-		boneNode.boneIdx = idx;
-		if (b.boneIndex < _bones.size())
+		// 自分のボーンインデックスを格納する
+		_boneTree[_bones[idx].name].boneIdx = idx;
+		if (_bones[idx].boneIndex < _bones.size())
 		{
-			boneNode.startPos = b.pos;
-			boneNode.endPos = _bones[b.boneIndex].pos;
+			// 自分のポジションを格納する
+			_boneTree[_bones[idx].name].startPos = _bones[idx].pos;
 		}
-	}	for (auto& b : _boneMap) {
-		if (_bones[b.second.boneIdx].parentboneIndex >= _bones.size())continue;
-		auto parentName = _bones[_bones[b.second.boneIdx].parentboneIndex].name;
-			_boneMap[parentName].children.push_back(&b.second);
+	}		for (auto& b : _boneTree) {
+		if (_bones[b.second.boneIdx].parentboneIndex < _bones.size())// 親のボーン番号がボーン総数を超えていなければノード追加
+		{
+			auto parentName = _bones[_bones[b.second.boneIdx].parentboneIndex].name;// 親の名前を確保
+
+			_boneTree[parentName].children.push_back(&b.second);// 親に自分のノード情報を子として追加
+		}
 	}
 }
 
-HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
+// PMXモデル描画用パイプラインステートの生成
+HRESULT PMXmodel::CreatePipeline()
+{
+	// シェーダーの読み込み
+	ID3DBlob* vertexShader = nullptr;
+	ID3DBlob* pixelShader = nullptr;
+
+	// 頂点シェーダ
+	auto result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, nullptr, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &vertexShader, nullptr);
+
+	// ピクセルシェーダ
+	result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, nullptr, "ps", "ps_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pixelShader, nullptr);
+	auto inputLayout = GetInputLayout();
+
+	// パイプラインを作るためのGPSの変数の作成
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC gpsDesc = {};
+
+	//ルートシグネチャと頂点レイアウト
+	gpsDesc.pRootSignature = _pmxSignature;
+	gpsDesc.InputLayout.pInputElementDescs = inputLayout.data();// 配列の開始位置
+	gpsDesc.InputLayout.NumElements = static_cast<unsigned int>(inputLayout.size());// 要素の数を入れる
+
+	//シェーダのセット
+	gpsDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader);
+	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader);
+
+	//レンダーターゲット
+	gpsDesc.NumRenderTargets = 1;
+	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	//深度ステンシル
+	gpsDesc.DepthStencilState.DepthEnable = true;
+	gpsDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;// 必須
+	gpsDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;// 小さいほうを通す
+
+	gpsDesc.DepthStencilState.StencilEnable = false;
+	gpsDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+
+	//ラスタライザ
+	gpsDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	gpsDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+
+	//レンダーターゲットブレンド設定用構造体
+	D3D12_RENDER_TARGET_BLEND_DESC renderBlend = {};
+	renderBlend.BlendEnable = true;
+	renderBlend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	renderBlend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	renderBlend.BlendOp = D3D12_BLEND_OP_ADD;
+	renderBlend.SrcBlendAlpha = D3D12_BLEND_ONE;
+	renderBlend.DestBlendAlpha = D3D12_BLEND_ZERO;
+	renderBlend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	renderBlend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+	//ブレンドステート設定用構造体
+	D3D12_BLEND_DESC blend = {};
+	blend.AlphaToCoverageEnable = false;
+	blend.IndependentBlendEnable = false;
+	blend.RenderTarget[0] = renderBlend;
+
+	//その他
+	gpsDesc.BlendState = blend;
+	gpsDesc.NodeMask = 0;
+	gpsDesc.SampleDesc.Count = 1;
+	gpsDesc.SampleDesc.Quality = 0;
+	gpsDesc.SampleMask = 0xffffffff;
+	gpsDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;//三角形
+
+	result = _dev->CreateGraphicsPipelineState(&gpsDesc, IID_PPV_ARGS(&_pmxPipeline));
+
+	return result;
+}
+
+// PMXモデル描画用ルートシグネチャの生成
+HRESULT PMXmodel::CreateRootSignature()
+{
+	ID3DBlob* signature = nullptr;
+	ID3DBlob* error = nullptr;
+
+	// サンプラの設定
+	D3D12_STATIC_SAMPLER_DESC SamplerDesc[2] = {};
+	SamplerDesc[0].Filter = D3D12_FILTER_MINIMUM_MIN_MAG_MIP_POINT;// 特別なフィルタを使用しない
+	SamplerDesc[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;// 画が繰り返し描画される
+	SamplerDesc[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	SamplerDesc[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	SamplerDesc[0].MaxLOD = D3D12_FLOAT32_MAX;// 上限なし
+	SamplerDesc[0].MinLOD = 0.0f;// 下限なし
+	SamplerDesc[0].MipLODBias = 0.0f;// MIPMAPのバイアス
+	SamplerDesc[0].BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;// エッジの色(黒)
+	SamplerDesc[0].ShaderRegister = 0;// 使用するレジスタスロット
+	SamplerDesc[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;// どのくらいのデータをシェーダに見せるか(全部)
+
+	SamplerDesc[1] = SamplerDesc[0];//変更点以外をコピー
+	SamplerDesc[1].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;//繰り返さない
+	SamplerDesc[1].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;//繰り返さない
+	SamplerDesc[1].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;//繰り返さない
+	SamplerDesc[1].ShaderRegister = 1; //シェーダスロット番号を忘れないように
+
+	// レンジの設定
+	D3D12_DESCRIPTOR_RANGE descRange[4] = {};// テクスチャと定数二つとぼーん
+	descRange[0].NumDescriptors = 1;
+	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;//定数
+	descRange[0].BaseShaderRegister = 0;//レジスタ番号
+	descRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	descRange[1].NumDescriptors = 1;
+	descRange[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;//定数
+	descRange[1].BaseShaderRegister = 1;//レジスタ番号
+	descRange[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	// テクスチャー
+	descRange[2].NumDescriptors = 4;// テクスチャとスフィアの二つとトゥーン
+	descRange[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;//てくすちゃ
+	descRange[2].BaseShaderRegister = 0;//レジスタ番号
+	descRange[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	// ボーン
+	descRange[3].NumDescriptors = 1;
+	descRange[3].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+	descRange[3].BaseShaderRegister = 2;
+	descRange[3].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	// ルートパラメータ変数の設定
+	D3D12_ROOT_PARAMETER rootParam[3] = {};
+	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
+	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	// テクスチャ
+	rootParam[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[1].DescriptorTable.pDescriptorRanges = &descRange[1];//対応するレンジへのポインタ
+	rootParam[1].DescriptorTable.NumDescriptorRanges = 2;
+	rootParam[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//ピクセルシェーダから参照
+
+	// ボーン
+	rootParam[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[2].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[2].DescriptorTable.pDescriptorRanges = &descRange[3];
+	rootParam[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
+	// ルートシグネチャを作るための変数の設定
+	D3D12_ROOT_SIGNATURE_DESC rsd = {};
+	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	rsd.pStaticSamplers = SamplerDesc;
+	rsd.pParameters = rootParam;
+	rsd.NumParameters = 3;
+	rsd.NumStaticSamplers = 2;
+
+	auto result = D3D12SerializeRootSignature(
+		&rsd,
+		D3D_ROOT_SIGNATURE_VERSION_1,
+		&signature,
+		&error);
+
+	// ルートシグネチャ本体の作成
+	result = _dev->CreateRootSignature(
+		0,
+		signature->GetBufferPointer(),
+		signature->GetBufferSize(),
+		IID_PPV_ARGS(&_pmxSignature));
+
+	return result;
+}
+
+HRESULT PMXmodel::CreateBoneBuffer()
 {
 	// サイズを調整
 	size_t size = sizeof(DirectX::XMMATRIX)*_bones.size();
@@ -753,7 +936,7 @@ HRESULT PMXmodel::CreateBoneBuffer(ID3D12Device* _dev)
 
 void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1, const XMFLOAT4 &quat2, float pow)
 {
-	auto bonenode = _boneMap[bonename];
+	auto bonenode = _boneTree[bonename];
 	auto start = XMLoadFloat3(&bonenode.startPos);// 元の座標を入れておく
 	auto quaternion = XMLoadFloat4(&quat1);
 	auto quaternion2 = XMLoadFloat4(&quat2);
@@ -768,7 +951,7 @@ void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1
 
 void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1)
 {
-	auto bonenode = _boneMap[bonename];
+	auto bonenode = _boneTree[bonename];
 	auto start = XMLoadFloat3(&bonenode.startPos);// 元の座標を入れておく
 	auto quaternion = XMLoadFloat4(&quat1);
 	auto bonetype = _bones[bonenode.boneIdx];
@@ -834,14 +1017,105 @@ void PMXmodel::UpDate(char key[256])
 	}
 	// モーションの更新
 	static auto lastTime = GetTickCount();
+	auto total = _vmdData->GetTotalFrame();
+
 	if (GetTickCount() - lastTime > _vmdData->Duration()*33.33333f) 
 	{
 		lastTime = GetTickCount();
 	}
+	if (total < static_cast<float>(GetTickCount() - lastTime) / 33.33333f)
+	{
+		lastTime = GetTickCount();
+	}
+
 	MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
 	MorphUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
+
 	// バッファの更新
 	BufferUpDate();
+}
+
+void PMXmodel::Draw(ID3D12GraphicsCommandList* list,D3D12_CPU_DESCRIPTOR_HANDLE dsvStart, ID3D12DescriptorHeap* wvp)
+{
+	float clearColor[] = { 0.5f,0.5f,0.5f,0.0f };
+
+	// ビューポートの設定
+	_viewPort.TopLeftX = 0;
+	_viewPort.TopLeftY = 0;
+	_viewPort.Width = static_cast<float>(Application::Instance().GetWindowSize().width);
+	_viewPort.Height = static_cast<float>(Application::Instance().GetWindowSize().height);
+	_viewPort.MaxDepth = 1.0f;
+	_viewPort.MinDepth = 0.0f;
+
+	// シザーの設定
+	_scissor.left = 0;
+	_scissor.top = 0;
+	_scissor.right = Application::Instance().GetWindowSize().width;
+	_scissor.bottom = Application::Instance().GetWindowSize().height;
+
+	// パイプラインのセット
+	list->SetPipelineState(_pmxPipeline);
+
+	// ルートシグネチャをセット
+	list->SetGraphicsRootSignature(_pmxSignature);
+
+	//ビューポートとシザー設定
+	list->RSSetViewports(1, &_viewPort);
+	list->RSSetScissorRects(1, &_scissor);
+
+	// でスクリプターヒープのセット(WVP)
+	list->SetDescriptorHeaps(1, &wvp);
+
+	// デスクリプタテーブルのセット(WVP)
+	D3D12_GPU_DESCRIPTOR_HANDLE wvpStart = wvp->GetGPUDescriptorHandleForHeapStart();
+	list->SetGraphicsRootDescriptorTable(0, wvpStart);
+
+	// デプスステンシルのクリア
+	list->ClearDepthStencilView(dsvStart, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+
+	// モデル描画
+	// インデックスバッファビューの設定
+	list->IASetIndexBuffer(&_idxView);
+
+	// 頂点バッファビューの設定
+	list->IASetVertexBuffers(0, 1, &_vbView);
+
+	// トポロジーのセット
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	unsigned int offset = 0;
+	auto boneheap = _boneHeap;
+	auto materialheap = _matDescHeap;
+
+	// デスクリプタヒープのセット(ボーン) 
+	list->SetDescriptorHeaps(1, &boneheap);
+
+	// デスクリプタテーブルのセット(ボーン)
+	auto bohandle = boneheap->GetGPUDescriptorHandleForHeapStart();
+	list->SetGraphicsRootDescriptorTable(2, bohandle);
+
+	// マテリアルのデスクリプタヒープのセット
+	list->SetDescriptorHeaps(1, &materialheap);
+
+	// 描画ループ
+	// デスクリプターハンドル一枚のサイズ取得
+	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	// マテリアルヒープの開始位置取得
+	auto mathandle = materialheap->GetGPUDescriptorHandleForHeapStart();
+	for (auto& m : _materials) {
+		// デスクリプタテーブルのセット
+		list->SetGraphicsRootDescriptorTable(1, mathandle);
+
+		// 描画部
+		list->DrawIndexedInstanced(m.faceVerCnt, 1, offset, 0, 0);
+
+		// ポインタの加算
+		mathandle.ptr += incsize * 5;// 5枚あるから5倍
+
+		// 変数の加算
+		offset += m.faceVerCnt;
+	}
 }
 
 const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
@@ -869,17 +1143,17 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
 	return inputLayoutDescs;
 }
 
+const XMFLOAT3 PMXmodel::GetPos()
+{
+	return _bones[_boneTree[L"センター"].boneIdx].pos;
+}
+
 const LPCWSTR PMXmodel::GetUseShader()
 {
 	return L"PMXShader.hlsl";
 }
 
-void PMXmodel::SetVMDFlame(unsigned int flame)
-{
-	AnimFlame = flame;
-}
-
-ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath, ID3D12Device* _dev)
+ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath)
 {
 	//WICテクスチャのロード
 	TexMetadata metadata = {};
@@ -963,7 +1237,7 @@ std::wstring PMXmodel::GetWstringFromString(const std::string& str)
 	return wstr;
 }
 
-HRESULT PMXmodel::CreateGrayGradationTexture(ID3D12Device* _dev)
+HRESULT PMXmodel::CreateGrayGradationTexture()
 {
 	// 転送する用のヒープ設定
 	D3D12_HEAP_PROPERTIES texHeapProp = {};
@@ -995,7 +1269,6 @@ HRESULT PMXmodel::CreateGrayGradationTexture(ID3D12Device* _dev)
 		IID_PPV_ARGS(&gradTex)
 	);
 
-
 	std::vector<unsigned int> data(4 * 256);
 	auto it = data.begin();
 	unsigned int c = 0xff;
@@ -1012,12 +1285,4 @@ HRESULT PMXmodel::CreateGrayGradationTexture(ID3D12Device* _dev)
 		sizeof(unsigned int)*data.size());
 
 	return result;
-}
-
-void PMXmodel::CreateBoneOrder(PMXBoneNode& node,int level)
-{
-	if (_bones[node.boneIdx].tranceLevel == level)
-	{
-		_orderMoveIdx.emplace_back(_bones[node.boneIdx].boneIndex);
-	}
 }

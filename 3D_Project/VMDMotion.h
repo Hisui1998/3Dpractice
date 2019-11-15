@@ -63,7 +63,8 @@ private:
 	std::map<std::string, std::vector<MotionInfo>> _motionData;// モーションデータ
 	std::map<std::string, std::vector<MorphInfo>> _morphData;// 表情データ
 
-	int flame;
+	static int flame;
+	int totalframe;
 
 	unsigned int MotionCount;// モーション数
 	unsigned int MorphCount;// 表情数
@@ -76,6 +77,7 @@ public:
 
 	std::map<std::string, std::vector<MotionInfo>>GetMotionData();
 	std::map<std::string, std::vector<MorphInfo>>GetMorphData();
-	int Duration() { return ++flame; };
+	int Duration();
+	const int GetTotalFrame();
 };
 
