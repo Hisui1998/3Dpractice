@@ -62,25 +62,30 @@ private:
 
 	// ペラポリ用
 	ID3D12Resource* _peraBuffer = nullptr;// ペラポリ本体のバッファ
+
 	ID3D12Resource* _peraBuffer2 = nullptr;// ペラポリ2本体のバッファ
 
 	ID3D12Resource* _peraVertBuff = nullptr;// ペラポリ用頂点バッファ
 	D3D12_VERTEX_BUFFER_VIEW _peravbView = {};// ペラポリ用頂点バッファビュー
 
 	ID3D12DescriptorHeap* _rtvDescHeap = nullptr;// ペラポリ用レンダーターゲットデスクリプタヒープ	
-	ID3D12DescriptorHeap* _rtvDescHeap2 = nullptr;// ペラポリ2用レンダーターゲットデスクリプタヒープ	
 	ID3D12DescriptorHeap* _srvDescHeap = nullptr;// ペラポリ用シェーダーリソースデスクリプタヒープ
+
+	ID3D12DescriptorHeap* _rtvDescHeap2 = nullptr;// ペラポリ2用レンダーターゲットデスクリプタヒープ	
 	ID3D12DescriptorHeap* _srvDescHeap2 = nullptr;// ペラポリ2用シェーダーリソースデスクリプタヒープ
 
 	ID3DBlob* peraVertShader = nullptr;// ペラポリ用頂点シェーダ
-	ID3DBlob* peraVertShader2 = nullptr;// ペラポリ2用頂点シェーダ
 	ID3DBlob* peraPixShader = nullptr;// ペラポリ用ピクセルシェーダ
+
+	ID3DBlob* peraVertShader2 = nullptr;// ペラポリ2用頂点シェーダ
 	ID3DBlob* peraPixShader2 = nullptr;// ペラポリ2用ピクセルシェーダ
 
 	ID3D12PipelineState* _peraPipeline = nullptr;// ペラポリ用パイプライン
 	ID3D12RootSignature* _peraSignature = nullptr;// ペラポリ用ルートシグネチャ
-	
 
+	ID3D12PipelineState* _peraPipeline2 = nullptr;// ペラポリ2用パイプライン
+	ID3D12RootSignature* _peraSignature2 = nullptr;// ペラポリ2用ルートシグネチャ
+	
 	// スワップチェイン用
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ		
 
@@ -104,18 +109,17 @@ private:
 	// コマンドリストとコマンドアロケータの作成
 	HRESULT CreateCmdListAndAlloc();
 
-	// ルートシグネチャを作る関数(レンジとパラメータもこの中)
-	HRESULT CreateRootSignature();
+	HRESULT CreateFirstSignature();
 
-	HRESULT CreatePeraRootSignature();
+	HRESULT CreateSecondSignature();
 
 	// フェンスの作成
 	HRESULT CreateFence();
 
-	// パイプラインを作る関数(頂点レイアウトの設定はこの中)
-	HRESULT CreateGraphicsPipelineState();
-
-	HRESULT CreatePeraPopelineState();
+	// パイプライン生成
+	HRESULT CreateFirstPopelineState();
+	
+	HRESULT CreateSecondPopelineState();
 
 	// 深度バッファと深度バッファビューを作る関数
 	HRESULT CreateDSV();
@@ -123,16 +127,18 @@ private:
 	// 定数バッファの作成
 	HRESULT CreateConstantBuffer();
 
-	// ヒープとビューの作成
-	HRESULT CreateHeapAndView();
-
 	// ぺらぽりの作成
-	HRESULT CreatePolygon();
+	HRESULT CreateFirstPolygon();
 
-	void DrawPolygon();
+	// ぺらポ氏用の頂点バッファの作成
+	HRESULT CreatePolygonVB();
 
-	// シェーダーのよみこみを行う関数
-	HRESULT LoadShader();
+	// ぺらぽり2の作成
+	HRESULT CreateSecondPolygon();
+
+	void DrawFirstPolygon();
+
+	void DrawSecondPolygon();
 	
 	// バッファに画を書き終わるまでウェイトをかける関数
 	void WaitWithFence();

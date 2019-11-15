@@ -40,8 +40,8 @@ float4 peraPS(Out o) : SV_Target
     b = pow(b, 4);
 
     //return float4(
-    //tex.Sample(smp, o.uv + float2(dx*-5, 0)).r,
-    //tex.Sample(smp, o.uv + float2(dx* 5, 0)).g,
+    //tex.Sample(smp, o.uv + float2(dx * -5, 0)).r,
+    //tex.Sample(smp, o.uv + float2(dx * 5, 0)).g,
     //tex.Sample(smp, o.uv).ba
     //);
 

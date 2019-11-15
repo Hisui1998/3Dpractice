@@ -241,6 +241,7 @@ private:
 
 	// テクスチャ系バッファ配列
 	std::vector<ID3D12Resource*> _textureBuffer;// テクスチャバッファ配列
+	static std::map<std::string, ID3D12Resource*>_texMap;// テクスチャネームからバッファを取り出す変数
 	std::vector<ID3D12Resource*> _sphBuffer;// 乗算スフィアマップバッファ配列
 	std::vector<ID3D12Resource*> _spaBuffer;// 加算スフィアマップバッファ配列
 	std::vector<ID3D12Resource*> _toonResources;// トゥーンバッファ配列
@@ -261,7 +262,6 @@ private:
 	std::string FolderPath;// モデルが入っているフォルダまでのパス
 
 	float _morphWeight;// もーふのウェイト(テスト用)
-	static int modelNum;
 public:
 	PMXmodel(ID3D12Device* dev, const std::string modelPath,const std::string vmdPath = "");
 	~PMXmodel();

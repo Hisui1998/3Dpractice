@@ -33,7 +33,7 @@
     <ClCompile Include="PMXmodel.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="Polygon.cpp">
+    <ClCompile Include="Screen.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
@@ -53,7 +53,7 @@
     <ClInclude Include="PMXmodel.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Polygon.h">
+    <ClInclude Include="Screen.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
@@ -61,5 +61,6 @@
     <FxCompile Include="PMXShader.hlsl" />
     <FxCompile Include="PMDShader.hlsl" />
     <FxCompile Include="PeraShader.hlsl" />
+    <FxCompile Include="pera2.hlsl" />
   </ItemGroup>
 </Project>

@@ -144,5 +144,5 @@ float4 ps(Out o):SV_TARGET
     return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
             + spa.Sample(smp, sphereMapUV) * texColor
             + saturate(specularB * specular)
-            + float4(texColor.rgb * ambient*0.2, texColor.a);
+            + float4(texColor.rgb * ambient, texColor.a);
 }

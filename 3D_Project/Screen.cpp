@@ -1,4 +1,4 @@
-#include "Polygon.h"
+#include "Screen.h"
 #include <d3dx12.h>
 #include "Application.h"
 

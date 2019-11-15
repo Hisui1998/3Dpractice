@@ -14,7 +14,7 @@
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib,"DirectXTex.lib")
 
-int PMXmodel::modelNum = 0;
+std::map<std::string, ID3D12Resource*> PMXmodel::_texMap;
 
 void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 {
@@ -313,12 +313,12 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	if (vmdPath != "")
 	{
 		// Vmd読み込み
-		//_vmdData = std::make_shared<VMDMotion>("VMD/DanceRobotDance_Motion.vmd");
-		//_vmdData = std::make_shared<VMDMotion>("VMD/swing2.vmd");
 		_vmdData = std::make_shared<VMDMotion>(vmdPath);
-		//_vmdData = std::make_shared<VMDMotion>("VMD/ヤゴコロダンス.vmd");
-		//_vmdData = std::make_shared<VMDMotion>("VMD/45秒MIKU.vmd");
 		_morphWeight = 0;
+	}
+	else
+	{
+		_vmdData = nullptr;
 	}
 
 
@@ -436,7 +436,6 @@ void PMXmodel::IKBoneRecursive(int frameno)
 
 PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath, const std::string vmdPath):_dev(dev)
 {
-	modelNum++;
 	LoadModel(modelPath, vmdPath);
 }
 
@@ -1015,21 +1014,24 @@ void PMXmodel::UpDate(char key[256])
 		mbuff->Unmap(0, nullptr);
 		++midx;
 	}
-	// モーションの更新
-	static auto lastTime = GetTickCount();
-	auto total = _vmdData->GetTotalFrame();
-
-	if (GetTickCount() - lastTime > _vmdData->Duration()*33.33333f) 
+	if (_vmdData)
 	{
-		lastTime = GetTickCount();
-	}
-	if (total < static_cast<float>(GetTickCount() - lastTime) / 33.33333f)
-	{
-		lastTime = GetTickCount();
-	}
+		// モーションの更新
+		static auto lastTime = GetTickCount();
+		auto total = _vmdData->GetTotalFrame();
 
-	MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
-	MorphUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
+		if (GetTickCount() - lastTime > _vmdData->Duration()*33.33333f) 
+		{
+			lastTime = GetTickCount();
+		}
+		if (total < static_cast<float>(GetTickCount() - lastTime) / 33.33333f)
+		{
+			lastTime = GetTickCount();
+		}
+			
+		MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
+		MorphUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
+	}
 
 	// バッファの更新
 	BufferUpDate();
@@ -1155,6 +1157,13 @@ const LPCWSTR PMXmodel::GetUseShader()
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath)
 {
+	// 読み込もうとしたテクスチャがすでに読み込んだことのあるテクスチャなら読み込まない
+	auto tex = _texMap.find(texPath);
+	if (tex != _texMap.end())
+	{
+		return (*tex).second;
+	}
+
 	//WICテクスチャのロード
 	TexMetadata metadata = {};
 	ScratchImage scratchImg = {};
@@ -1204,6 +1213,8 @@ ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath)
 		static_cast<unsigned int>(img->rowPitch),
 		static_cast<unsigned int>(img->slicePitch)
 	);
+	// テクスチャマップに追加
+	_texMap[texPath] = texbuff;
 
 	return texbuff;
 }

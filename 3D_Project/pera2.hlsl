@@ -12,7 +12,7 @@ struct Out
 };
 
 //頂点シェーダ
-Out peraVS(
+Out pera2VS(
     float4 pos : POSITION,
     float2 uv : TEXCOORD)
 {
@@ -24,7 +24,7 @@ Out peraVS(
 }
 
 //ピクセルシェーダ
-float4 peraPS(Out o) : SV_Target
+float4 pera2PS(Out o) : SV_Target
 {
-    return float4(1,0,0,1);
+    return tex.Sample(smp,o.uv);
 }
