@@ -313,7 +313,7 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	if (vmdPath != "")
 	{
 		// Vmdì«Ç›çûÇ›
-		_vmdData = std::make_shared<VMDMotion>(vmdPath,0);
+		_vmdData = std::make_shared<VMDMotion>(vmdPath,60);
 		_morphWeight = 0;
 	}
 	else
@@ -458,6 +458,8 @@ void PMXmodel::MorphUpDate(int frameno)
 
 				for (auto& nextmd : nextIt->second)
 				{
+					auto nextmorphName = GetWstringFromString(nextmd.SkinName);
+					auto& nextmorphVec = _morphData[nextmorphName];
 					auto addVec = mv.vertexMorph.pos;
 					addVec.x*=nowmd.Weight;
 					addVec.y*=nowmd.Weight;
@@ -1101,16 +1103,12 @@ void PMXmodel::UpDate(char key[256])
 		static auto lastTime = GetTickCount();
 		auto total = _vmdData->GetTotalFrame();
 
-		if (GetTickCount() - lastTime > _vmdData->Duration()*33.33333f) 
-		{
-			lastTime = GetTickCount();
-		}
 		if (total < static_cast<float>(GetTickCount() - lastTime) / 33.33333f)
 		{
 			lastTime = GetTickCount();
 		}
 			
-		//MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
+		MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
 		MorphUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
 	}
 
