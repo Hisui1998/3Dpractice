@@ -26,5 +26,5 @@ Out pera2VS(
 //ピクセルシェーダ
 float4 pera2PS(Out o) : SV_Target
 {
-    return tex.Sample(smp,o.uv);
+	return tex.Sample(smp,o.uv);
 }

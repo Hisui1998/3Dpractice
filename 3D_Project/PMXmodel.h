@@ -207,6 +207,8 @@ private:
 
 	void RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat);
 
+	float GetBezierPower(float x, const XMFLOAT2& a, const XMFLOAT2& b, uint8_t n);
+
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
 	ID3D12PipelineState* _pmxPipeline=nullptr;// PMX描画用パイプライン

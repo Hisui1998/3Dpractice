@@ -2,8 +2,8 @@
 #include "Dx12Wrapper.h"
 #include <vector>
 
-constexpr int WINDOW_WIDTH = 1280;
-constexpr int WINDOW_HEIGHT = 720;
+constexpr int WINDOW_WIDTH = 1366;
+constexpr int WINDOW_HEIGHT = 768;
 
 LRESULT WindowProcedure(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {

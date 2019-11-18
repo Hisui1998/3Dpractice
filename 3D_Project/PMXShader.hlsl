@@ -12,6 +12,7 @@ cbuffer mat : register(b0)
     matrix world;
     matrix view;
     matrix projection;
+	matrix shadow;
     matrix wvp;
     matrix lvp;
 };
@@ -57,6 +58,7 @@ struct Out
     int4 boneno : BONENO0;
 
 	float4 weight      : WEIGHT0;
+	uint instNo : INSTID;
 };
 
 // 頂点シェーダ
@@ -71,7 +73,8 @@ Out vs(
 
 	int4 boneno : BONENO,
 
-	float4 weight : WEIGHT
+	float4 weight : WEIGHT,
+	uint instNo : SV_InstanceID
 )
 /*頂点シェーダ*/
 {
@@ -99,6 +102,11 @@ Out vs(
     }
 
 	float4 movepos = mul(m, float4(pos, 1));
+	if (instNo == 1)
+	{
+        movepos = mul(shadow, movepos);
+    }
+
     o.pos = mul(world, movepos);
     o.svpos = mul(wvp, movepos);
     o.uv = uv;
@@ -110,6 +118,7 @@ Out vs(
     o.boneno = boneno;
 
     o.weight = weight;
+    o.instNo = instNo;
 
 	return o;
 }
@@ -117,7 +126,10 @@ Out vs(
 // ピクセルシェーダ
 float4 ps(Out o):SV_TARGET
 {
-    //return float4(o.weight.rgb,1);
+	if (o.instNo == 1)
+	{
+		return float4(0,0,0,1);
+	}
     // 視線ベクトル
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;

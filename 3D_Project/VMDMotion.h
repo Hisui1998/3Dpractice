@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <string>
 
 // ヘッダー情報
 struct VMDHeader {
@@ -16,7 +17,7 @@ struct MotionInfo {
 	char BoneName[15]; // ボーン名
 	unsigned int FrameNo; // フレーム番号
 	DirectX::XMFLOAT3 Location; // 位置
-	DirectX::XMFLOAT4 Rotatation;// 回転
+	DirectX::XMFLOAT4 Quaternion;// 回転
 	unsigned char Interpolation[64];// 補完
 };
 
@@ -29,6 +30,14 @@ struct MorphInfo { // 23 Bytes // 表情
 };
 #pragma pack()
 
+struct MotionData
+{
+	std::string BoneName; // ボーン名
+	unsigned int FrameNo; // フレーム番号
+	DirectX::XMFLOAT3 Location; // 位置
+	DirectX::XMFLOAT4 Quaternion;// 回転
+	DirectX::XMFLOAT2 p1, p2;//ベジェ用
+};
 
 // カメラデータ
 struct CameraData{ 
@@ -60,11 +69,13 @@ class VMDMotion
 private:
 	void LoadVMD(std::string fileName);
 
-	std::map<std::string, std::vector<MotionInfo>> _motionData;// モーションデータ
-	std::map<std::string, std::vector<MorphInfo>> _morphData;// 表情データ
+	std::map<std::string, std::vector<MotionData>> _motionData;// モーションデータ
+	// フレームナンバーが同じモーフは合成して使う
+	std::map<int, std::vector<MorphInfo>>  _morphData;// 表情データ
 
 	static int flame;
 	int totalframe;
+	const int _waitFlame;// ループした後ウェイトをかけるフレーム数
 
 	unsigned int MotionCount;// モーション数
 	unsigned int MorphCount;// 表情数
@@ -72,11 +83,11 @@ private:
 	unsigned int LightCount;// ライト数
 	unsigned int ShadowCount;// シャドウ数
 public:
-	VMDMotion(std::string fileName);
+	VMDMotion(std::string fileName, int waitFlame = -1);
 	~VMDMotion();
 
-	std::map<std::string, std::vector<MotionInfo>>GetMotionData();
-	std::map<std::string, std::vector<MorphInfo>>GetMorphData();
+	std::map<std::string, std::vector<MotionData>>GetMotionData();
+	std::map<int, std::vector<MorphInfo>>GetMorphData();
 	int Duration();
 	const int GetTotalFrame();
 };

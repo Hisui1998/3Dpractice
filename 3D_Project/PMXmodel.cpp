@@ -313,7 +313,7 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	if (vmdPath != "")
 	{
 		// Vmd読み込み
-		_vmdData = std::make_shared<VMDMotion>(vmdPath);
+		_vmdData = std::make_shared<VMDMotion>(vmdPath,0);
 		_morphWeight = 0;
 	}
 	else
@@ -386,7 +386,7 @@ void PMXmodel::MotionUpDate(int frameno)
 
 		// 今使うモーションデータを取得
 		auto frameIt = std::find_if(keyframes.rbegin(), keyframes.rend(),
-			[frameno](const MotionInfo& k) {return k.FrameNo <= frameno; });
+			[frameno](const MotionData& k) {return k.FrameNo <= frameno; });
 		if (frameIt == keyframes.rend())continue;
 
 		// イテレータを反転させて次の要素をとってくる
@@ -394,7 +394,7 @@ void PMXmodel::MotionUpDate(int frameno)
 
 		if (nextIt == keyframes.end()) {
 			// 回転
-			RotationMatrix(GetWstringFromString(boneName), frameIt->Rotatation);
+			RotationMatrix(GetWstringFromString(boneName), frameIt->Quaternion);
 			
 			// 座標移動
 			_boneMats[_boneTree[GetWstringFromString(boneName)].boneIdx]
@@ -406,9 +406,10 @@ void PMXmodel::MotionUpDate(int frameno)
 		{
 			// 現在のﾌﾚｰﾑ位置から重み計算
 			float pow = (static_cast<float>(frameno) - frameIt->FrameNo) / (nextIt->FrameNo - frameIt->FrameNo);
+			pow = GetBezierPower(pow, frameIt->p1, frameIt->p2, 12);
 
 			// 回転
-			RotationMatrix(GetWstringFromString(boneName), frameIt->Rotatation, nextIt->Rotatation, pow);
+			RotationMatrix(GetWstringFromString(boneName), frameIt->Quaternion, nextIt->Quaternion, pow);
 
 			// 座標移動
 			_boneMats[_boneTree[GetWstringFromString(boneName)].boneIdx]
@@ -427,6 +428,10 @@ void PMXmodel::MotionUpDate(int frameno)
 
 void PMXmodel::MorphUpDate(int frameno)
 {
+	for (auto&md : _morphData[L"真面目"])
+	{
+		vertexInfo[md.vertexMorph.verIdx].pos;
+	}
 }
 
 void PMXmodel::IKBoneRecursive(int frameno)
@@ -974,6 +979,39 @@ void PMXmodel::RecursiveMatrixMultiply(PMXBoneNode& node, XMMATRIX& MultiMat)
 	}
 }
 
+float PMXmodel::GetBezierPower(float x, const XMFLOAT2 & a, const XMFLOAT2 & b, uint8_t n)
+{
+	// aとbが同じなら計算する必要なし
+	if (a.x == a.y&&b.x == b.y)
+	{
+		return x;
+	}
+
+	float t = x;
+
+	const float k0 = 1 + 3 * a.x - 3 * b.x;//t^3の係数
+	const float k1 = 3 * b.x - 6 * a.x;//t^2の係数
+	const float k2 = 3 * a.x;//tの係数
+
+	constexpr float epsilon = 0.0005f;// 計算をやめる誤差
+
+	for (int i = 0; i < n; ++i) {
+		
+		auto ft = k0 * t*t*t + k1 * t*t + k2 * t - x;
+
+		// 計算結果が誤差の範囲なら計算終了
+		if (ft <= epsilon && ft >= -epsilon)
+		{
+			break;
+		}
+		t -= ft / 2;// 二で割っていく
+	}
+
+	// yを計算する
+	auto r = 1 - t;
+	return t * t*t + 3 * t*t*r*b.y + 3 * t*r*r*a.y;
+}
+
 void PMXmodel::UpDate(char key[256])
 {
 	if (key[DIK_F])
@@ -1110,7 +1148,7 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list,D3D12_CPU_DESCRIPTOR_HANDLE 
 		list->SetGraphicsRootDescriptorTable(1, mathandle);
 
 		// 描画部
-		list->DrawIndexedInstanced(m.faceVerCnt, 1, offset, 0, 0);
+		list->DrawIndexedInstanced(m.faceVerCnt, 2, offset, 0, 0);
 
 		// ポインタの加算
 		mathandle.ptr += incsize * 5;// 5枚あるから5倍
@@ -1141,6 +1179,14 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
 		{"BONENO",0,DXGI_FORMAT_R32G32B32A32_SINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		// weight
 		{"WEIGHT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+
+		{"SDEFDATA",0,DXGI_FORMAT_R32G32B32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"SDEFDATA",1,DXGI_FORMAT_R32G32B32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"SDEFDATA",2,DXGI_FORMAT_R32G32B32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+				
+		{"EDGESIZE",0,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		
+		{"INSTID",0,DXGI_FORMAT_R32_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 	};
 	return inputLayoutDescs;
 }

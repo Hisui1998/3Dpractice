@@ -16,6 +16,7 @@ struct WVPMatrix {
 	DirectX::XMMATRIX world;
 	DirectX::XMMATRIX view;
 	DirectX::XMMATRIX projection;
+	DirectX::XMMATRIX shadow;
 	DirectX::XMMATRIX wvp;
 	DirectX::XMMATRIX lvp;
 };
@@ -30,37 +31,107 @@ struct Vertex
 class Dx12Wrapper
 {
 private:
-	//  ---デバイス系変数---  //
+	// ラッパー用関数
+	void KeyUpDate();// キー情報更新
+	void ScreenUpDate();// 画面の更新
+
+	// デバイスの初期化
+	HRESULT DeviceInit();
+
+	// スワップチェインとコマンドキューの作成
+	HRESULT CreateSwapChainAndCmdQue();
+
+	// コマンドリストとコマンドアロケータの作成
+	HRESULT CreateCmdListAndAlloc();
+
+	// フェンスの作成
+	HRESULT CreateFence();
+
+	// 深度バッファと深度バッファビューを作る関数
+	HRESULT CreateDepthStencilView();
+
+	// WVP用定数バッファの作成
+	HRESULT CreateWVPConstantBuffer();
+
+	// バッファに画を書き終わるまでウェイトをかける関数
+	void WaitWithFence();
+
+	// コマンドを処理し終わったかどうかを返す関数
+	void ExecuteCommand();
+
+	// ラッパー用変数
 	HWND _hwnd;// ウィンドウハンドル
-
 	IDXGIFactory6* _dxgi = nullptr;// ファクトリ
-
 	IDXGISwapChain4* _swapchain = nullptr;// スワップチェイン
-
 	ID3D12Device* _dev = nullptr;// デバイス
-	ID3D12Device* _keydev = nullptr;// キーボードデバイス
+
+	LPDIRECTINPUT8       _directInput;// DirectInput本体
+	LPDIRECTINPUTDEVICE8 _keyBoadDev;// キーボードデバイス
 
 	// コマンド系
 	ID3D12CommandAllocator* _cmdAlloc = nullptr;// コマンドアロケータ
 	ID3D12GraphicsCommandList* _cmdList = nullptr;// コマンドリスト
 	ID3D12CommandQueue* _cmdQue = nullptr;// コマンドキュー
 
-	LPDIRECTINPUT8       _directInput;// DirectInput本体
-	LPDIRECTINPUTDEVICE8 _keyBoadDev;// キーボードデバイス
-
 	ID3D12Fence* _fence = nullptr;// フェンス
 	UINT64 _fenceValue = 0;// フェンス値
 
-	ID3D12DescriptorHeap* _dsvDescHeap;// DSV(深度)デスクリプタヒープ
+	// 深度バッファ用
 	ID3D12Resource* _depthBuffer = nullptr;// 深度バッファ
+	ID3D12DescriptorHeap* _dsvDescHeap;// 深度バッファデスクリプタヒープ
+	ID3D12DescriptorHeap* _dsvSrvHeap;// 深度SRVデスクリプタヒープ	
 
-	ID3D12DescriptorHeap* _cameraDescHeap;// カメラ用の定数バッファ用デスクリプタヒープ
-	ID3D12Resource* _cameraBuff = nullptr;// カメラ用の定数バッファ
+	// スワップチェイン用
+	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ
+	std::vector<ID3D12Resource*>renderTargets;// スワップチェインで使うバッファのRTV	
+
+	int _perthLevel = 0;// パースのレベル
+	char key[256] = {};
 
 	D3D12_VIEWPORT _viewPort;// ビューポート
 	D3D12_RECT _scissor;// シザー範囲
 
-	// ペラポリ用
+	// WVP用
+	ID3D12Resource* _wvpBuff = nullptr;// WVP用の定数バッファ
+	ID3D12DescriptorHeap* _wvpDescHeap;// WVP用の定数バッファデスクリプタヒープ
+	WVPMatrix* _wvpMP;
+	WVPMatrix _wvp;
+	float angle;// 角度
+	DirectX::XMFLOAT3 eye;// 視点の座標
+	DirectX::XMFLOAT3 target;// どこを見ているかの座標
+	DirectX::XMFLOAT3 up;// 軸
+
+	std::shared_ptr<PMDmodel> pmdModel;
+	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
+
+
+	/*板ポリ用関数(あとでクラスに分ける予定)*/
+	// 板ポリゴン用の頂点バッファの作成
+	HRESULT CreatePolygonVertexBuffer();
+
+	// 一枚目ポリゴン用ルートシグネチャの作成
+	HRESULT CreateFirstSignature();
+
+	// 二枚目ポリゴン用ルートシグネチャの作成
+	HRESULT CreateSecondSignature();
+
+	// 一枚目ポリゴン用パイプライン生成
+	HRESULT CreateFirstPopelineState();
+
+	// 二枚目ポリゴン用パイプライン生成
+	HRESULT CreateSecondPopelineState();
+
+	// 一枚目ポリゴンの作成
+	HRESULT CreateFirstPolygon();
+
+	// 一枚目ポリゴンの作成
+	HRESULT CreateSecondPolygon();
+
+	// ポリゴン描画関数
+	void DrawFirstPolygon();
+	void DrawSecondPolygon();
+
+	// ペラポリ用変数
 	ID3D12Resource* _peraBuffer = nullptr;// ペラポリ本体のバッファ
 
 	ID3D12Resource* _peraBuffer2 = nullptr;// ペラポリ2本体のバッファ
@@ -85,83 +156,11 @@ private:
 
 	ID3D12PipelineState* _peraPipeline2 = nullptr;// ペラポリ2用パイプライン
 	ID3D12RootSignature* _peraSignature2 = nullptr;// ペラポリ2用ルートシグネチャ
-	
-	// スワップチェイン用
-	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ		
 
-	ID3D12RootSignature* _rootSignature = nullptr;
+	// ルートシグネチャの作成時に使う変数
 	ID3DBlob* signature = nullptr;
 	ID3DBlob* error = nullptr;
-
-	ID3D12PipelineState* _pipelineState = nullptr;
-	std::vector<ID3D12Resource*>renderTargets;
-
-	ID3DBlob* vertexShader = nullptr;// 頂点シェーダ
-	ID3DBlob* pixelShader = nullptr;// ピクセルシェーダ
-
-	/*　作成と初期化系関数　*/
-	// デバイスの初期化
-	HRESULT DeviceInit();
-
-	// スワップチェインとコマンドキューの作成
-	HRESULT CreateSwapChainAndCmdQue();
-
-	// コマンドリストとコマンドアロケータの作成
-	HRESULT CreateCmdListAndAlloc();
-
-	HRESULT CreateFirstSignature();
-
-	HRESULT CreateSecondSignature();
-
-	// フェンスの作成
-	HRESULT CreateFence();
-
-	// パイプライン生成
-	HRESULT CreateFirstPopelineState();
-	
-	HRESULT CreateSecondPopelineState();
-
-	// 深度バッファと深度バッファビューを作る関数
-	HRESULT CreateDSV();
-
-	// 定数バッファの作成
-	HRESULT CreateConstantBuffer();
-
-	// ぺらぽりの作成
-	HRESULT CreateFirstPolygon();
-
-	// ぺらポ氏用の頂点バッファの作成
-	HRESULT CreatePolygonVB();
-
-	// ぺらぽり2の作成
-	HRESULT CreateSecondPolygon();
-
-	void DrawFirstPolygon();
-
-	void DrawSecondPolygon();
-	
-	// バッファに画を書き終わるまでウェイトをかける関数
-	void WaitWithFence();
-
-	// コマンドを処理し終わったかどうかを返す関数
-	void ExecuteCommand();
-
-	//　---以下変数--- //
-	
-	WVPMatrix* _wvpMP;
-	WVPMatrix _wvp;
-	float angle;// 角度
-	int cnt = 0;
-	char key[256] = {};
-
-	// カメラ用
-	DirectX::XMFLOAT3 eye;// カメラの座標
-	DirectX::XMFLOAT3 target;// ターゲットの座標
-	DirectX::XMFLOAT3 up;// 方向
-
-	std::shared_ptr<PMDmodel> pmdModel;
-	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
-	bool isPMD = false;
+	/// 板ポリ用ここまで
 public:
 	Dx12Wrapper(HWND hwnd);
 	~Dx12Wrapper();
