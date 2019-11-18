@@ -223,6 +223,7 @@ private:
 	std::map<std::wstring, std::vector<MorphOffsets>> _morphData;// モーフ名からモーフ情報が取得できる(ヘッダ情報からモーフ種類を取得して使う)
 
 	std::vector<PMXVertexInfo> vertexInfo;// 頂点情報が入っている配列
+	std::vector<PMXVertexInfo> firstVertexInfo;// 頂点情報の初期情報が入っている配列
 	std::vector<unsigned int> _verindex;// 頂点インデックス情報が入っている
 	std::vector<std::string>_texturePaths;// テクスチャのパスを格納している配列
 	std::vector<PMXMaterial> _materials;// マテリアル情報が入っている配列

@@ -37,10 +37,10 @@ void VMDMotion::LoadVMD(std::string fileName)
 	fread(&MorphCount, sizeof(MorphCount), 1, fp);
 	for (int i = 0; i < MorphCount; ++i)
 	{
-		MorphInfo mi;
-		fread(&mi, sizeof(mi), 1, fp);
+		MorphData mi;
+		fread(&mi.SkinName, sizeof(mi), 1, fp);
 
-		_morphData[mi.FrameNo].emplace_back(mi);
+		_morphData[mi.FrameNo].emplace_back(mi.SkinName,mi.FrameNo,mi.Weight);
 	}
 
 	fread(&CameraCount, sizeof(CameraCount), 1, fp);

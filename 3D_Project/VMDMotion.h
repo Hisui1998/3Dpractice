@@ -21,14 +21,22 @@ struct MotionInfo {
 	unsigned char Interpolation[64];// 補完
 };
 
-
 // 表情情報
-struct MorphInfo { // 23 Bytes // 表情
+struct MorphData { // 23 Bytes // 表情
 	char SkinName[15]; // 表情名
 	unsigned int FrameNo; // フレーム番号
 	float Weight; // 表情の設定値(表情スライダーの値)
 };
 #pragma pack()
+
+// 表情情報
+struct MorphInfo {
+	std::string SkinName; // 表情名
+	unsigned int FrameNo; // フレーム番号
+	float Weight; // 表情の設定値(表情スライダーの値)
+	MorphInfo(std::string sn, unsigned int fn, float w) :SkinName(sn), FrameNo(fn), Weight(w){};
+};
+
 
 struct MotionData
 {

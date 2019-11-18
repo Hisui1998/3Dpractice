@@ -337,6 +337,7 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 			_textureBuffer[i] = LoadTextureFromFile(str);
 		}
 	}
+	firstVertexInfo = vertexInfo;
 
 	auto result = CreateRootSignature();
 
@@ -428,9 +429,51 @@ void PMXmodel::MotionUpDate(int frameno)
 
 void PMXmodel::MorphUpDate(int frameno)
 {
-	for (auto&md : _morphData[L"真面目"])
+	auto morphData = _vmdData->GetMorphData();
+
+	// 今使うモーションデータを取得
+	auto frameIt = std::find_if(morphData.rbegin(), morphData.rend(),
+		[frameno](const std::pair<int, std::vector<MorphInfo>>& k) {return k.first <= frameno; });
+	if (frameIt == morphData.rend())return;
+	// イテレータを反転させて次の要素をとってくる
+	auto nextIt = frameIt.base();
+	for (auto& nowmd:frameIt->second)
 	{
-		vertexInfo[md.vertexMorph.verIdx].pos;
+		auto morphName = GetWstringFromString(nowmd.SkinName);
+		auto& morphVec = _morphData[morphName];
+		for (auto& mv : morphVec)
+		{
+			if (nextIt == morphData.end()) {
+
+					vertexInfo[mv.vertexMorph.verIdx].pos.x =
+						firstVertexInfo[mv.vertexMorph.verIdx].pos.x + mv.vertexMorph.pos.x*nowmd.Weight;
+					vertexInfo[mv.vertexMorph.verIdx].pos.y =
+						firstVertexInfo[mv.vertexMorph.verIdx].pos.y + mv.vertexMorph.pos.y*nowmd.Weight;
+					vertexInfo[mv.vertexMorph.verIdx].pos.z =
+						firstVertexInfo[mv.vertexMorph.verIdx].pos.z + mv.vertexMorph.pos.z*nowmd.Weight;
+			}
+			else
+			{
+				float pow = (static_cast<float>(frameno) - frameIt->first) / (nextIt->first - frameIt->first);
+
+				for (auto& nextmd : nextIt->second)
+				{
+					auto addVec = mv.vertexMorph.pos;
+					addVec.x*=nowmd.Weight;
+					addVec.y*=nowmd.Weight;
+					addVec.z*=nowmd.Weight;
+					auto addVec2 = mv.vertexMorph.pos;
+					addVec2.x*=nextmd.Weight;
+					addVec2.y*=nextmd.Weight;
+					addVec2.z*=nextmd.Weight;
+					XMStoreFloat3(&vertexInfo[mv.vertexMorph.verIdx].pos,
+						XMVectorLerp(XMLoadFloat3(&addVec), XMLoadFloat3(&addVec2), pow));
+					vertexInfo[mv.vertexMorph.verIdx].pos.x += firstVertexInfo[mv.vertexMorph.verIdx].pos.x;
+					vertexInfo[mv.vertexMorph.verIdx].pos.y += firstVertexInfo[mv.vertexMorph.verIdx].pos.y;
+					vertexInfo[mv.vertexMorph.verIdx].pos.z += firstVertexInfo[mv.vertexMorph.verIdx].pos.z;
+				}
+			}
+		}
 	}
 }
 
@@ -1067,7 +1110,7 @@ void PMXmodel::UpDate(char key[256])
 			lastTime = GetTickCount();
 		}
 			
-		MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
+		//MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
 		MorphUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
 	}
 
