@@ -1,6 +1,9 @@
 //テクスチャ
 Texture2D<float4> tex : register(t0);
 
+//深度テクスチャ
+Texture2D<float4> depthtex : register(t1);
+
 // サンプラ
 SamplerState smp : register(s0);
 
@@ -24,7 +27,7 @@ Out peraVS(
 }
 
 //ピクセルシェーダ
-float4 peraPS(Out o) : SV_Target
+float4 peraPS(Out o) : SV_TarGet
 {
     float w, h, level;
     tex.GetDimensions(0, w, h, level);
@@ -39,12 +42,9 @@ float4 peraPS(Out o) : SV_Target
     float b = dot(float3(0.3f, 0.3f, 0.4f), 1 - ret.rgb);
     b = pow(b, 4);
 
-    /*return float4(
-    tex.Sample(smp, o.uv + float2(dx * -1, 0)).r,
-    tex.Sample(smp, o.uv + float2(dx *  1, 0)).g,
-	tex.Sample(smp, o.uv + float2(dx * -1, 0)).r,
-	tex.Sample(smp, o.uv + float2(dx * -1, 0)).a,
-    );*/
+    float dep = depthtex.Sample(smp, o.uv);
+    dep = 1-pow(dep,20);
+    return float4(dep, dep, dep,1);
 
     return float4(float4(1, b, b, 1) * tex.Sample(smp, o.uv));
 }

@@ -187,7 +187,7 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 		XM_PIDIV4,
 		static_cast<float>(wsize.width) / static_cast<float>(wsize.height),
 		0.1f,
-		300.0f
+		1000.0f
 	);
 
 	// サイズを調整
@@ -470,25 +470,36 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	SamplerDesc[0].MaxAnisotropy = 0;// FilterがAnisotropyのときのみ有効
 
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[1] = {};// 一枚ポリゴン
+	D3D12_DESCRIPTOR_RANGE descRange[2] = {};// 一枚ポリゴン
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
 	descRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// 深度
+	descRange[1].NumDescriptors = 1;
+	descRange[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
+	descRange[1].BaseShaderRegister = 1;//レジスタ番号
+	descRange[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[1] = {};
+	D3D12_ROOT_PARAMETER rootParam[2] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	rootParam[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[1].DescriptorTable.pDescriptorRanges = &descRange[1];//対応するレンジへのポインタ
+	rootParam[1].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 1;
+	rsd.NumParameters = 2;
 	rsd.NumStaticSamplers = 1;
 
 	auto result = D3D12SerializeRootSignature(
@@ -707,7 +718,7 @@ void Dx12Wrapper::DrawFirstPolygon()
 	_cmdList->ResourceBarrier(1, &BarrierDesc);
 
 	// レンダーターゲットの設定
-	_cmdList->OMSetRenderTargets(1, &heapStart, false, &depthStart);
+	_cmdList->OMSetRenderTargets(1, &heapStart, false, nullptr);
 	_cmdList->ClearRenderTargetView(heapStart, clearColor, 0, nullptr);
 
 	// 頂点バッファビューの設定
@@ -719,6 +730,10 @@ void Dx12Wrapper::DrawFirstPolygon()
 	// デスクリプタのセット
 	_cmdList->SetDescriptorHeaps(1,&_srvDescHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(0, _srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+
+	// デスクリプタのセット
+	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(1, _dsvSrvHeap->GetGPUDescriptorHandleForHeapStart());
 
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);
@@ -1034,7 +1049,7 @@ int Dx12Wrapper::Init()
 	// モデル読み込み
 	pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミク.pmd");
 	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
-	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/2B/na_2b_0407.pmx", "VMD/ヤゴコロダンス.vmd"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/2B/na_2b_0407.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
 	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));

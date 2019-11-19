@@ -751,7 +751,6 @@ HRESULT PMXmodel::CreateMaterialBuffer()
 		}
 		matHandle.ptr += addsize;
 	}
-
 	return result;
 }
 
@@ -1101,15 +1100,16 @@ void PMXmodel::UpDate(char key[256])
 	{
 		// モーションの更新
 		static auto lastTime = GetTickCount();
-		auto total = _vmdData->GetTotalFrame();
+		auto TotalFrame = _vmdData->GetTotalFrame();
+		auto NowFrame = static_cast<float>(GetTickCount() - lastTime) / 33.33333f;
 
-		if (total < static_cast<float>(GetTickCount() - lastTime) / 33.33333f)
+		if (TotalFrame < NowFrame)
 		{
 			lastTime = GetTickCount();
 		}
 			
-		MotionUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
-		MorphUpDate(static_cast<float>(GetTickCount() - lastTime) / 33.33333f);
+		MotionUpDate(NowFrame);// 動きの更新
+		MorphUpDate(NowFrame); // 表情の更新
 	}
 
 	// バッファの更新
