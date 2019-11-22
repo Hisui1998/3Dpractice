@@ -168,27 +168,35 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 	target = XMFLOAT3(0, 10,0);
 	up = XMFLOAT3(0,1,0);
 
-	auto p = XMFLOAT4(0, 1, 0, 0);//平面の方程式
-	auto l = XMFLOAT4(-1, 1, -1, 0);//ライト座標
+	auto plane = XMFLOAT4(0, 1, 0, 0);//平面の方程式
+	auto light = XMFLOAT4(-1, 1, -1, 0);// ライトの平行光線の方向
 
 	angle = 0.f;
 
+	// ライト座標の算出
+	XMFLOAT3 lightpos;
+	XMStoreFloat3(&lightpos,XMVector4Normalize(XMLoadFloat4(&light)) * XMVector3Length(XMLoadFloat3(&target) - XMLoadFloat3(&eye)));//ライト座標
+	
+	// ライトから注視点への行列の計算
+	XMMATRIX lightview = DirectX::XMMatrixLookAtLH(DirectX::XMLoadFloat3(&lightpos),DirectX::XMLoadFloat3(&target),DirectX::XMLoadFloat3(&up));
+
+	// 正射影行列の算出
+	XMMATRIX lightproj = XMMatrixOrthographicLH(40, 40, 0.1f,1000.f);
+
+	// ライトビュープロジェクションの算出
+	_wvp.lvp = lightview * lightproj;
+
+	// ワールド行列の計算
 	_wvp.world = DirectX::XMMatrixRotationY(angle);
 
-	_wvp.shadow = XMMatrixShadow(XMLoadFloat4(&p), XMLoadFloat4(&l));
+	// ライトから地面への射影行列（嘘影）の計算
+	_wvp.shadow = XMMatrixShadow(XMLoadFloat4(&plane), XMLoadFloat4(&light));
 
-	_wvp.view = DirectX::XMMatrixLookAtLH(
-		DirectX::XMLoadFloat3(&eye),
-		DirectX::XMLoadFloat3(&target),
-		DirectX::XMLoadFloat3(&up)
-	);
+	// ビュー行列の計算（視点から注視点への行列）
+	_wvp.view = DirectX::XMMatrixLookAtLH(DirectX::XMLoadFloat3(&eye),DirectX::XMLoadFloat3(&target),DirectX::XMLoadFloat3(&up));
 
-	_wvp.projection = XMMatrixPerspectiveFovLH(
-		XM_PIDIV4,
-		static_cast<float>(wsize.width) / static_cast<float>(wsize.height),
-		0.1f,
-		1000.0f
-	);
+	// プロジェクション行列の計算
+	_wvp.projection = XMMatrixPerspectiveFovLH(XM_PIDIV4,static_cast<float>(wsize.width) / static_cast<float>(wsize.height),0.1f,1000.0f);
 
 	// サイズを調整
 	size_t size = sizeof(_wvp);
@@ -232,11 +240,12 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 	Size wsize = Application::Instance().GetWindowSize();
 
 	D3D12_DESCRIPTOR_HEAP_DESC _dsvHeapDesc = {};
-	_dsvHeapDesc.NumDescriptors = 1;
+	_dsvHeapDesc.NumDescriptors = 2;
 	_dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
 
 	auto result = _dev->CreateDescriptorHeap(&_dsvHeapDesc, IID_PPV_ARGS(&_dsvDescHeap));
-	
+
+	_dsvHeapDesc.NumDescriptors = 2;
 	_dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	_dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
@@ -270,7 +279,7 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 		&depthResDesc,
 		D3D12_RESOURCE_STATE_DEPTH_WRITE,
 		&_depthClearValue,
-		IID_PPV_ARGS(&_depthBuffer));	
+		IID_PPV_ARGS(&_depthBuffer));
 
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvdec = {};
 	dsvdec.Format = DXGI_FORMAT_D32_FLOAT;
@@ -278,7 +287,14 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 	dsvdec.Texture2D.MipSlice = 0;
 	dsvdec.Flags = D3D12_DSV_FLAG_NONE;
 	
-	_dev->CreateDepthStencilView(_depthBuffer, &dsvdec, _dsvDescHeap->GetCPUDescriptorHandleForHeapStart());
+	auto heapstart = _dsvDescHeap->GetCPUDescriptorHandleForHeapStart();
+
+	_dev->CreateDepthStencilView(_depthBuffer, &dsvdec, heapstart);
+
+	heapstart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+	_dev->CreateDepthStencilView(_depthBuffer, &dsvdec, heapstart);// ライトから見た深度を書き込むヒープ
+
 	
 	// シェーダーリソースビューの作成
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -287,7 +303,13 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = 1;
 
-	_dev->CreateShaderResourceView(_depthBuffer, &srvDesc, _dsvSrvHeap->GetCPUDescriptorHandleForHeapStart());
+	auto srvstart = _dsvSrvHeap->GetCPUDescriptorHandleForHeapStart();
+
+	_dev->CreateShaderResourceView(_depthBuffer, &srvDesc, srvstart);
+
+	heapstart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	_dev->CreateShaderResourceView(_depthBuffer, &srvDesc, srvstart);
 
 	return result;
 }
@@ -307,7 +329,6 @@ void Dx12Wrapper::ExecuteCommand()
 	_cmdQue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&_cmdList);
 	_cmdQue->Signal(_fence, ++_fenceValue);
 }
-
 
 /* ポリゴン系関数(あとでクラスに分ける予定) */
 // 板ポリ用の頂点バッファ作成
@@ -470,7 +491,7 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	SamplerDesc[0].MaxAnisotropy = 0;// FilterがAnisotropyのときのみ有効
 
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[2] = {};// 一枚ポリゴン
+	D3D12_DESCRIPTOR_RANGE descRange[3] = {};// 一枚ポリゴン
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
@@ -482,24 +503,37 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	descRange[1].BaseShaderRegister = 1;//レジスタ番号
 	descRange[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// ライトからの深度
+	descRange[2].NumDescriptors = 1;
+	descRange[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
+	descRange[2].BaseShaderRegister = 2;//レジスタ番号
+	descRange[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[2] = {};
+	D3D12_ROOT_PARAMETER rootParam[3] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
+	// カメラからの深度
 	rootParam[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[1].DescriptorTable.pDescriptorRanges = &descRange[1];//対応するレンジへのポインタ
 	rootParam[1].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	// ライトからの深度
+	rootParam[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[2].DescriptorTable.pDescriptorRanges = &descRange[2];//対応するレンジへのポインタ
+	rootParam[2].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 2;
+	rsd.NumParameters = 3;
 	rsd.NumStaticSamplers = 1;
 
 	auto result = D3D12SerializeRootSignature(
@@ -731,9 +765,16 @@ void Dx12Wrapper::DrawFirstPolygon()
 	_cmdList->SetDescriptorHeaps(1,&_srvDescHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(0, _srvDescHeap->GetGPUDescriptorHandleForHeapStart());
 
-	// デスクリプタのセット
+	// カメラ深度のセット
+	auto dstart = _dsvSrvHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
-	_cmdList->SetGraphicsRootDescriptorTable(1, _dsvSrvHeap->GetGPUDescriptorHandleForHeapStart());
+	_cmdList->SetGraphicsRootDescriptorTable(1, dstart);
+
+	dstart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	// ライト深度のセット
+	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(2, dstart);
 
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);
@@ -876,6 +917,7 @@ void Dx12Wrapper::KeyUpDate()
 		angle -= addsize / 10;
 	}
 
+
 	if (key[DIK_W])
 	{
 		eye.z += addsize;
@@ -903,8 +945,6 @@ void Dx12Wrapper::KeyUpDate()
 		eye = XMFLOAT3(0, 10, -25);
 		target = XMFLOAT3(0, 10, 0);
 		up = XMFLOAT3(0, 1, 0);
-
-		angle = 0.f;
 	}
 	if (key[DIK_P])
 	{
@@ -913,38 +953,43 @@ void Dx12Wrapper::KeyUpDate()
 	if (key[DIK_P] && (Oldkey[DIK_P] == 0))
 	{
 		float rota[3] = { XM_PIDIV4 , XM_PIDIV2 ,XM_PI / 30 * XM_PI };
-		_perthLevel++;
+		_persLevel++;
 		_wvp.projection = XMMatrixPerspectiveFovLH(
-			rota[_perthLevel % 3],
+			rota[_persLevel % 3],
 			static_cast<float>(wsize.width) / static_cast<float>(wsize.height),
 			0.1f,
-			300.0f
+			1000.0f
 		);
 	}
 
-	_wvp.view = DirectX::XMMatrixLookAtLH(
-		DirectX::XMLoadFloat3(&eye),
-		DirectX::XMLoadFloat3(&target),
-		DirectX::XMLoadFloat3(&up)
-	);
-	pmdModel->UpDate();
+	pmdModel->UpDate();// PMDモデルの更新
 
+	// PMXモデルの更新
 	for (auto& model : pmxModels)
 	{
 		model->UpDate(key);
 	}
-	// 描画順に並び替える
+
+	// 座標が視点に近い順に描画順を並び替える
 	std::sort(pmxModels.begin(), pmxModels.end(), [](std::shared_ptr<PMXmodel>& a, std::shared_ptr<PMXmodel>& b)
 	{
 		return (a->GetPos().z > b->GetPos().z);
 	});
 
-	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
+	// カメラ
+	// 現在のビュー行列を保存
+	_wvp.view = DirectX::XMMatrixLookAtLH(
+		DirectX::XMLoadFloat3(&eye),
+		DirectX::XMLoadFloat3(&target),
+		DirectX::XMLoadFloat3(&up));
+
+	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;// Y軸を基準に回転する
 
 	_wvp.wvp = _wvp.world;
 	_wvp.wvp *= _wvp.view;
 	_wvp.wvp *= _wvp.projection;
-	*_wvpMP = _wvp;
+
+	*_wvpMP = _wvp;// 転送用に書き込む
 }
 
 // 画面描画関数
@@ -962,9 +1007,27 @@ void Dx12Wrapper::ScreenUpDate()
 
 	// 深度バッファビューヒープの開始位置をとってくる
 	auto depthStart = _dsvDescHeap->GetCPUDescriptorHandleForHeapStart();
+
 	auto peraStart = _rtvDescHeap->GetCPUDescriptorHandleForHeapStart();// 一枚目のポリゴンに描画
+	
 	_cmdAlloc->Reset();
 	_cmdList->Reset(_cmdAlloc, nullptr);//コマンドリストリセット
+
+	// シャドウ
+	// デプスステンシルのクリア
+	_cmdList->ClearDepthStencilView(depthStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	depthStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+	//レンダーターゲット設定
+	_cmdList->OMSetRenderTargets(0, nullptr, false, &depthStart);
+
+	for (auto &model : pmxModels)
+	{
+		model->PreDrawShadow(_cmdList, _wvpDescHeap);
+	}
+
+	// モデルの描画
+	depthStart = _dsvDescHeap->GetCPUDescriptorHandleForHeapStart();// 元に戻す
 
 	// リソースバリア
 	_cmdList->ResourceBarrier(1, &BarrierDesc);
@@ -974,10 +1037,10 @@ void Dx12Wrapper::ScreenUpDate()
 
 	//レンダーターゲットのクリア
 	_cmdList->ClearRenderTargetView(peraStart, clearColor, 0, nullptr);
-
+	   	 
 	for (auto &model : pmxModels)
 	{
-		model->Draw(_cmdList, depthStart, _wvpDescHeap);
+		model->Draw(_cmdList, _wvpDescHeap);
 	}
 
 	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -1070,28 +1133,29 @@ int Dx12Wrapper::Init()
 		return 7;
 
 	if (FAILED(CreateWVPConstantBuffer()))
-		return 8;
-
-	if (FAILED(CreateFirstPolygon()))
-		return 9;
-
-	if (FAILED(CreateFirstSignature()))
 		return 10;
 
-	if (FAILED(CreateFirstPopelineState()))
+
+	if (FAILED(CreateFirstPolygon()))
 		return 11;
 
-	if (FAILED(CreateSecondPolygon()))
+	if (FAILED(CreateFirstSignature()))
 		return 12;
 
-	if (FAILED(CreateSecondSignature()))
+	if (FAILED(CreateFirstPopelineState()))
 		return 13;
 
-	if (FAILED(CreateSecondPopelineState()))
+	if (FAILED(CreateSecondPolygon()))
 		return 14;
 
-	if (FAILED(CreatePolygonVertexBuffer()))
+	if (FAILED(CreateSecondSignature()))
 		return 15;
+
+	if (FAILED(CreateSecondPopelineState()))
+		return 16;
+
+	if (FAILED(CreatePolygonVertexBuffer()))
+		return 17;
 
 
 	return 0;

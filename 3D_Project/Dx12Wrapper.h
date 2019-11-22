@@ -85,7 +85,7 @@ private:
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ
 	std::vector<ID3D12Resource*>renderTargets;// スワップチェインで使うバッファのRTV	
 
-	int _perthLevel = 0;// パースのレベル
+	int _persLevel = 0;// パースのレベル
 	char key[256] = {};
 
 	D3D12_VIEWPORT _viewPort;// ビューポート

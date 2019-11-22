@@ -209,6 +209,20 @@ private:
 
 	float GetBezierPower(float x, const XMFLOAT2& a, const XMFLOAT2& b, uint8_t n);
 
+	/* シャドウマップ用 */
+	// シャドウマップ用ルートシグネチャの作成
+	HRESULT CreateShadowRS();
+
+	// シャドウマップ用パイプライン生成
+	HRESULT CreateShadowPS();
+
+	ID3DBlob* _shadowVertShader = nullptr;// シャドウマップ用頂点シェーダ
+	ID3DBlob* _shadowPixShader = nullptr;// シャドウマップ用ピクセルシェーダ
+
+	ID3D12PipelineState* _shadowMapGPS;
+	ID3D12RootSignature* _shadowMapRS;
+	/// シャドウマップここまで
+
 	PMXHeader header;// ヘッダー情報が入ってるよ
 
 	ID3D12PipelineState* _pmxPipeline=nullptr;// PMX描画用パイプライン
@@ -265,13 +279,16 @@ private:
 	std::string FolderPath;// モデルが入っているフォルダまでのパス
 
 	float _morphWeight;// もーふのウェイト(テスト用)
+	int frame = 0;
 public:
 	PMXmodel(ID3D12Device* dev, const std::string modelPath,const std::string vmdPath = "");
 	~PMXmodel();
 
 	void UpDate(char key[256]);
 	// 描画関数(リストと深度バッファヒープ位置とWVP定数バッファ)
-	void Draw(ID3D12GraphicsCommandList* list,D3D12_CPU_DESCRIPTOR_HANDLE dsvStart,ID3D12DescriptorHeap* constant);
+	void Draw(ID3D12GraphicsCommandList* list,ID3D12DescriptorHeap* constant);
+	// シャドウ深度の描画
+	void PreDrawShadow(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp);
 
 	std::vector<PMXMaterial> GetMaterials() { return _materials; };
 

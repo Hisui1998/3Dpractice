@@ -331,7 +331,7 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 
 	for (int i=0;i< matNum;++i)
 	{
-		if (_materials[i].texIndex != 255)
+		if (_materials[i].texIndex < _texturePaths.size())
 		{
 			auto str = FolderPath + _texturePaths[_materials[i].texIndex];
 			_textureBuffer[i] = LoadTextureFromFile(str);
@@ -347,10 +347,16 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 
 	result = CreateIndexBuffer();
 
+	result = CreateShadowRS();
+
+	result = CreateShadowPS();
+
 	// しろてくすちゃつくる
 	result = CreateWhiteTexture();
+
 	// くろてくすちゃつくる
 	result = CreateBlackTexture();
+
 	// グラデーションテクスチャつくる
 	result = CreateGrayGradationTexture();
 
@@ -482,6 +488,189 @@ void PMXmodel::MorphUpDate(int frameno)
 void PMXmodel::IKBoneRecursive(int frameno)
 {
 
+}
+
+
+void PMXmodel::PreDrawShadow(ID3D12GraphicsCommandList * list, ID3D12DescriptorHeap * wvp)
+{
+	float clearColor[] = { 1,1,1,1 };
+
+	// ビューポートの設定
+	_viewPort.TopLeftX = 0;
+	_viewPort.TopLeftY = 0;
+	_viewPort.Width = static_cast<float>(Application::Instance().GetWindowSize().width);
+	_viewPort.Height = static_cast<float>(Application::Instance().GetWindowSize().height);
+	_viewPort.MaxDepth = 1.0f;
+	_viewPort.MinDepth = 0.0f;
+
+	// シザーの設定
+	_scissor.left = 0;
+	_scissor.top = 0;
+	_scissor.right = Application::Instance().GetWindowSize().width;
+	_scissor.bottom = Application::Instance().GetWindowSize().height;
+
+	// パイプラインのセット
+	list->SetPipelineState(_shadowMapGPS);
+
+	// ルートシグネチャをセット
+	list->SetGraphicsRootSignature(_shadowMapRS);
+
+	//ビューポートとシザー設定
+	list->RSSetViewports(1, &_viewPort);
+	list->RSSetScissorRects(1, &_scissor);
+
+	// モデル描画
+	// インデックスバッファビューの設定
+	list->IASetIndexBuffer(&_idxView);
+
+	// 頂点バッファビューの設定
+	list->IASetVertexBuffers(0, 1, &_vbView);
+
+	// トポロジーのセット
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	unsigned int offset = 0;
+
+	// でスクリプターヒープのセット(WVP)
+	list->SetDescriptorHeaps(1, &wvp);
+
+	// デスクリプタテーブルのセット(WVP)
+	D3D12_GPU_DESCRIPTOR_HANDLE wvpStart = wvp->GetGPUDescriptorHandleForHeapStart();
+	list->SetGraphicsRootDescriptorTable(0, wvpStart);
+
+	// デスクリプタヒープのセット(ボーン) 
+	list->SetDescriptorHeaps(1, &_boneHeap);
+
+	// デスクリプタテーブルのセット(ボーン)
+	auto bohandle = _boneHeap->GetGPUDescriptorHandleForHeapStart();
+	list->SetGraphicsRootDescriptorTable(1, bohandle);
+
+	for (auto& m : _materials) {
+		// 描画部
+		list->DrawIndexedInstanced(m.faceVerCnt, 1, offset, 0, 0);
+
+		// 変数の加算
+		offset += m.faceVerCnt;
+	}
+}
+
+HRESULT PMXmodel::CreateShadowRS()
+{
+	ID3DBlob* signature = nullptr;
+	ID3DBlob* error = nullptr;
+
+	// サンプラの設定
+	D3D12_STATIC_SAMPLER_DESC SamplerDesc[1] = {};
+	SamplerDesc[0].Filter = D3D12_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR;// 特別なフィルタを使用しない
+	SamplerDesc[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;// 画が繰り返し描画される
+	SamplerDesc[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	SamplerDesc[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	SamplerDesc[0].MaxLOD = D3D12_FLOAT32_MAX;// 上限なし
+	SamplerDesc[0].MinLOD = 0.0f;// 下限なし
+	SamplerDesc[0].MipLODBias = 0.0f;// MIPMAPのバイアス
+	SamplerDesc[0].BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;// エッジの色(黒)
+	SamplerDesc[0].ShaderRegister = 0;// 使用するレジスタスロット
+	SamplerDesc[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;// どのくらいのデータをシェーダに見せるか(全部)
+	
+	// レンジの設定
+	D3D12_DESCRIPTOR_RANGE descRange[2] = {};
+	//WVP
+	descRange[0].NumDescriptors = 1;
+	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;//定数
+	descRange[0].BaseShaderRegister = 0;//レジスタ番号
+	descRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	// ボーン
+	descRange[1].NumDescriptors = 1;
+	descRange[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;//定数
+	descRange[1].BaseShaderRegister = 1;//レジスタ番号
+	descRange[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	// ルートパラメータ変数の設定
+	D3D12_ROOT_PARAMETER rootParam[2] = {};
+	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
+	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	// ボーン
+	rootParam[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[1].DescriptorTable.pDescriptorRanges = &descRange[1];
+	rootParam[1].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
+	// ルートシグネチャを作るための変数の設定
+	D3D12_ROOT_SIGNATURE_DESC rsd = {};
+	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	rsd.pStaticSamplers = SamplerDesc;
+	rsd.pParameters = rootParam;
+	rsd.NumParameters = 2;
+	rsd.NumStaticSamplers = 1;
+
+	auto result = D3D12SerializeRootSignature(
+		&rsd,
+		D3D_ROOT_SIGNATURE_VERSION_1,
+		&signature,
+		&error);
+
+	// ルートシグネチャ本体の作成
+	result = _dev->CreateRootSignature(
+		0,
+		signature->GetBufferPointer(),
+		signature->GetBufferSize(),
+		IID_PPV_ARGS(&_shadowMapRS));
+
+	return result;
+}
+
+HRESULT PMXmodel::CreateShadowPS()
+{
+	auto result = D3DCompileFromFile(L"Shadow.hlsl", nullptr, nullptr, "shadowVS", "vs_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &_shadowVertShader, nullptr);
+
+	// ピクセルシェーダ
+	result = D3DCompileFromFile(L"Shadow.hlsl", nullptr, nullptr, "shadowPS", "ps_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &_shadowPixShader, nullptr);
+
+	auto InputLayout = GetInputLayout();
+
+	// パイプラインを作るためのGPSの変数の作成
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC gpsDesc = {};
+
+	//ルートシグネチャと頂点レイアウト
+	gpsDesc.pRootSignature = _shadowMapRS;
+	gpsDesc.InputLayout.pInputElementDescs = InputLayout.data();// 配列の開始位置
+	gpsDesc.InputLayout.NumElements = static_cast<unsigned int>(InputLayout.size());// 要素の数を入れる
+
+	//シェーダのセット
+	gpsDesc.VS = CD3DX12_SHADER_BYTECODE(_shadowVertShader);
+	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(_shadowPixShader);
+
+	// レンダーターゲット数の指定(今回はレンダーターゲットがないため０)
+	gpsDesc.NumRenderTargets = 0;
+
+	//深度ステンシル
+	gpsDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	gpsDesc.DepthStencilState.DepthEnable = true;
+	gpsDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;// 必須
+	gpsDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;// 小さいほうを通す
+
+	gpsDesc.DepthStencilState.StencilEnable = false;
+
+	//ラスタライザ
+	gpsDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	gpsDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+
+	//その他
+	gpsDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	gpsDesc.NodeMask = 0;
+	gpsDesc.SampleDesc.Count = 1;
+	gpsDesc.SampleDesc.Quality = 0;
+	gpsDesc.SampleMask = 0xffffffff;
+	gpsDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;//三角形
+
+	result = _dev->CreateGraphicsPipelineState(&gpsDesc, IID_PPV_ARGS(&_shadowMapGPS));
+
+	return result;
 }
 
 PMXmodel::PMXmodel(ID3D12Device* dev, const std::string modelPath, const std::string vmdPath):_dev(dev)
@@ -688,7 +877,7 @@ HRESULT PMXmodel::CreateMaterialBuffer()
 		// 固有トゥーンの場合分け
 		if (!_materials[i].toonFlag)
 		{
-			if (_materials[i].toonIndex!=255)
+			if (_materials[i].toonIndex < _texturePaths.size())
 			{
 				toonFilePath = FolderPath;
 				sprintf_s(toonFileName, _texturePaths[_materials[i].toonIndex].c_str());
@@ -1107,7 +1296,7 @@ void PMXmodel::UpDate(char key[256])
 		{
 			lastTime = GetTickCount();
 		}
-			
+
 		MotionUpDate(NowFrame);// 動きの更新
 		MorphUpDate(NowFrame); // 表情の更新
 	}
@@ -1116,7 +1305,7 @@ void PMXmodel::UpDate(char key[256])
 	BufferUpDate();
 }
 
-void PMXmodel::Draw(ID3D12GraphicsCommandList* list,D3D12_CPU_DESCRIPTOR_HANDLE dsvStart, ID3D12DescriptorHeap* wvp)
+void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp)
 {
 	float clearColor[] = { 0.5f,0.5f,0.5f,0.0f };
 
@@ -1150,9 +1339,6 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list,D3D12_CPU_DESCRIPTOR_HANDLE 
 	// デスクリプタテーブルのセット(WVP)
 	D3D12_GPU_DESCRIPTOR_HANDLE wvpStart = wvp->GetGPUDescriptorHandleForHeapStart();
 	list->SetGraphicsRootDescriptorTable(0, wvpStart);
-
-	// デプスステンシルのクリア
-	list->ClearDepthStencilView(dsvStart, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
 	// モデル描画
 	// インデックスバッファビューの設定
@@ -1227,7 +1413,7 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
 				
 		{"EDGESIZE",0,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		
-		{"INSTID",0,DXGI_FORMAT_R32_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"INSTID",0,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 	};
 	return inputLayoutDescs;
 }

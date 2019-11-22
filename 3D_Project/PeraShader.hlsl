@@ -2,7 +2,10 @@
 Texture2D<float4> tex : register(t0);
 
 //深度テクスチャ
-Texture2D<float4> depthtex : register(t1);
+Texture2D<float4> depth : register(t1);
+
+//深度テクスチャライト
+Texture2D<float4> lightdepth : register(t2);
 
 // サンプラ
 SamplerState smp : register(s0);
@@ -42,9 +45,18 @@ float4 peraPS(Out o) : SV_TarGet
     float b = dot(float3(0.3f, 0.3f, 0.4f), 1 - ret.rgb);
     b = pow(b, 4);
 
-    float dep = depthtex.Sample(smp, o.uv);
-    dep = 1-pow(dep,20);
-    return float4(dep, dep, dep,1);
+    if ((o.uv.x <= 0.2) && (o.uv.y <= 0.2))
+    {
+        float dep = depth.Sample(smp, o.uv * 5);
+        dep = pow(dep, 100);
+        return 1-float4(dep, dep, dep, 1);
+    }
+    else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.4))
+    {
+        float dep = lightdepth.Sample(smp, o.uv * 5);
+        dep = pow(dep, 100);
+        return 1-float4(dep, dep, dep, 1);
+    }
 
     return float4(float4(1, b, b, 1) * tex.Sample(smp, o.uv));
 }

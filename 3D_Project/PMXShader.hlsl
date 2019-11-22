@@ -150,6 +150,7 @@ float4 ps(Out o):SV_TARGET
     {
         return float4(0, 0, 0, 1);
     }
+
 	return saturate(texColor * diffuse * toonDif)
                 + saturate(float4(specularB * specular.rgb, o.instNo));
 
