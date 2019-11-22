@@ -1068,12 +1068,14 @@ HRESULT PMXmodel::CreateRootSignature()
 	SamplerDesc[1].ShaderRegister = 1; //シェーダスロット番号を忘れないように
 
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[4] = {};// テクスチャと定数二つとぼーん
+	D3D12_DESCRIPTOR_RANGE descRange[5] = {};// テクスチャと定数二つとぼーん
+	// WVP
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;//定数
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
 	descRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// マテリアル
 	descRange[1].NumDescriptors = 1;
 	descRange[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;//定数
 	descRange[1].BaseShaderRegister = 1;//レジスタ番号
@@ -1091,8 +1093,14 @@ HRESULT PMXmodel::CreateRootSignature()
 	descRange[3].BaseShaderRegister = 2;
 	descRange[3].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// syadou 
+	descRange[4].NumDescriptors = 1;
+	descRange[4].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descRange[4].BaseShaderRegister = 4;//レジスタ番号
+	descRange[4].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[3] = {};
+	D3D12_ROOT_PARAMETER rootParam[4] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
@@ -1110,12 +1118,18 @@ HRESULT PMXmodel::CreateRootSignature()
 	rootParam[2].DescriptorTable.pDescriptorRanges = &descRange[3];
 	rootParam[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
+	// しゃどうｗ
+	rootParam[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[3].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[3].DescriptorTable.pDescriptorRanges = &descRange[4];
+	rootParam[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 3;
+	rsd.NumParameters = 4;
 	rsd.NumStaticSamplers = 2;
 
 	auto result = D3D12SerializeRootSignature(
@@ -1305,7 +1319,7 @@ void PMXmodel::UpDate(char key[256])
 	BufferUpDate();
 }
 
-void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp)
+void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, ID3D12DescriptorHeap*shadow)
 {
 	float clearColor[] = { 0.5f,0.5f,0.5f,0.0f };
 
@@ -1383,6 +1397,13 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp)
 		// 変数の加算
 		offset += m.faceVerCnt;
 	}
+
+	// でスクリプターヒープのセット(shadow)
+	list->SetDescriptorHeaps(1, &shadow);
+
+	// デスクリプタテーブルのセット(shadow)
+	auto shadowStart = shadow->GetGPUDescriptorHandleForHeapStart();
+	list->SetGraphicsRootDescriptorTable(0, shadowStart);
 }
 
 const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()

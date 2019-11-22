@@ -39,6 +39,8 @@ Texture2D<float4> spa : register(t2); //2 番スロットに設定されたテクスチャ
 
 // トゥーン
 Texture2D<float4> toon : register(t3); //3 番スロットに設定されたテクスチャ(トゥーン)
+// シャドウ
+Texture2D<float4> shadowMap : register(t4); //4 番スロットに設定されたテクスチャ(shadow)
 struct Out
 {
 	float4 pos              : POSITION;
@@ -104,7 +106,7 @@ Out vs(
 	float4 movepos = mul(m, float4(pos, 1));
 	if (instNo == 1)
 	{
-        movepos = mul(shadow, movepos);
+       // movepos = mul(shadow, movepos);
     }
 
     o.pos = mul(world, movepos);
@@ -148,14 +150,22 @@ float4 ps(Out o):SV_TARGET
     
     if (o.instNo == 1)
     {
-        return float4(0, 0, 0, 1);
+        //return float4(0, 0, 0, 1);
+    }
+    
+    float2 uv = (float2(1, -1) + o.svpos.xy) * float2(0.5, -0.5);
+    float depth = pow(shadowMap.Sample(smp, uv).z, 100);
+    float4 dbright = float4(1, 1, 1, 1);
+    if (o.pos.z > depth+0.00005f)
+    {
+        dbright *= 0;
     }
 
 	return saturate(texColor * diffuse * toonDif)
-                + saturate(float4(specularB * specular.rgb, o.instNo));
+                + saturate(float4(specularB * specular.rgb, o.instNo)) * dbright;
 
-    return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
-            + spa.Sample(smp, sphereMapUV) * texColor
-            + saturate(specularB * specular)
-            + float4(texColor.rgb * ambient, texColor.a);
+    //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
+    //        + spa.Sample(smp, sphereMapUV) * texColor
+    //        + saturate(specularB * specular)
+    //        + float4(texColor.rgb * ambient, texColor.a);
 }

@@ -285,8 +285,10 @@ public:
 	~PMXmodel();
 
 	void UpDate(char key[256]);
+
 	// 描画関数(リストと深度バッファヒープ位置とWVP定数バッファ)
-	void Draw(ID3D12GraphicsCommandList* list,ID3D12DescriptorHeap* constant);
+	void Draw(ID3D12GraphicsCommandList* list,ID3D12DescriptorHeap* constant,ID3D12DescriptorHeap*shadow);
+
 	// シャドウ深度の描画
 	void PreDrawShadow(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp);
 

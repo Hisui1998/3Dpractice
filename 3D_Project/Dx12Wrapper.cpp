@@ -169,34 +169,39 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 	up = XMFLOAT3(0,1,0);
 
 	auto plane = XMFLOAT4(0, 1, 0, 0);//平面の方程式
-	auto light = XMFLOAT4(-1, 1, -1, 0);// ライトの平行光線の方向
+	lightVec = XMFLOAT3(-10, 20, -10);// ライトの平行光線の方向
 
 	angle = 0.f;
 
 	// ライト座標の算出
 	XMFLOAT3 lightpos;
-	XMStoreFloat3(&lightpos,XMVector4Normalize(XMLoadFloat4(&light)) * XMVector3Length(XMLoadFloat3(&target) - XMLoadFloat3(&eye)));//ライト座標
+	XMStoreFloat3(&lightpos,
+		XMVector4Normalize(XMLoadFloat3(&lightVec)) * XMVector3Length(XMLoadFloat3(&target) - XMLoadFloat3(&eye)));//ライト座標
 	
 	// ライトから注視点への行列の計算
-	XMMATRIX lightview = DirectX::XMMatrixLookAtLH(DirectX::XMLoadFloat3(&lightpos),DirectX::XMLoadFloat3(&target),DirectX::XMLoadFloat3(&up));
+	XMMATRIX lightview = DirectX::XMMatrixLookAtLH(
+		DirectX::XMLoadFloat3(&lightpos),
+		DirectX::XMLoadFloat3(&target),
+		DirectX::XMLoadFloat3(&up)
+	);
 
 	// 正射影行列の算出
-	XMMATRIX lightproj = XMMatrixOrthographicLH(40, 40, 0.1f,1000.f);
-
-	// ライトビュープロジェクションの算出
-	_wvp.lvp = lightview * lightproj;
+	lightproj = XMMatrixOrthographicLH(40, 40, 0.1f,1000.f);
 
 	// ワールド行列の計算
 	_wvp.world = DirectX::XMMatrixRotationY(angle);
 
 	// ライトから地面への射影行列（嘘影）の計算
-	_wvp.shadow = XMMatrixShadow(XMLoadFloat4(&plane), XMLoadFloat4(&light));
+	_wvp.shadow = XMMatrixShadow(XMLoadFloat4(&plane), XMLoadFloat3(&lightVec));
 
 	// ビュー行列の計算（視点から注視点への行列）
 	_wvp.view = DirectX::XMMatrixLookAtLH(DirectX::XMLoadFloat3(&eye),DirectX::XMLoadFloat3(&target),DirectX::XMLoadFloat3(&up));
 
 	// プロジェクション行列の計算
 	_wvp.projection = XMMatrixPerspectiveFovLH(XM_PIDIV4,static_cast<float>(wsize.width) / static_cast<float>(wsize.height),0.1f,1000.0f);
+
+	// ライトビュープロジェクションの算出
+	_wvp.lvp = lightview * lightproj;
 
 	// サイズを調整
 	size_t size = sizeof(_wvp);
@@ -240,17 +245,19 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 	Size wsize = Application::Instance().GetWindowSize();
 
 	D3D12_DESCRIPTOR_HEAP_DESC _dsvHeapDesc = {};
-	_dsvHeapDesc.NumDescriptors = 2;
+	_dsvHeapDesc.NumDescriptors = 1;
 	_dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
 
 	auto result = _dev->CreateDescriptorHeap(&_dsvHeapDesc, IID_PPV_ARGS(&_dsvDescHeap));
+	result = _dev->CreateDescriptorHeap(&_dsvHeapDesc, IID_PPV_ARGS(&_lightDescHeap));
 
-	_dsvHeapDesc.NumDescriptors = 2;
+	_dsvHeapDesc.NumDescriptors = 1;
 	_dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	_dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	// シェーダーリソースデスクリプタヒープの作成
 	result = _dev->CreateDescriptorHeap(&_dsvHeapDesc, IID_PPV_ARGS(&_dsvSrvHeap));
+	result = _dev->CreateDescriptorHeap(&_dsvHeapDesc, IID_PPV_ARGS(&_lightSrvHeap));
 
 	// DSV用のリソースデスク
 	D3D12_RESOURCE_DESC depthResDesc = {};
@@ -281,6 +288,14 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 		&_depthClearValue,
 		IID_PPV_ARGS(&_depthBuffer));
 
+	result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&depthResDesc,
+		D3D12_RESOURCE_STATE_DEPTH_WRITE,
+		&_depthClearValue,
+		IID_PPV_ARGS(&_lightBuffer));
+
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvdec = {};
 	dsvdec.Format = DXGI_FORMAT_D32_FLOAT;
 	dsvdec.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
@@ -291,9 +306,9 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 
 	_dev->CreateDepthStencilView(_depthBuffer, &dsvdec, heapstart);
 
-	heapstart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	heapstart = _lightDescHeap->GetCPUDescriptorHandleForHeapStart();
 
-	_dev->CreateDepthStencilView(_depthBuffer, &dsvdec, heapstart);// ライトから見た深度を書き込むヒープ
+	_dev->CreateDepthStencilView(_lightBuffer, &dsvdec, heapstart);// ライトから見た深度を書き込むヒープ
 
 	
 	// シェーダーリソースビューの作成
@@ -307,9 +322,9 @@ HRESULT Dx12Wrapper::CreateDepthStencilView()
 
 	_dev->CreateShaderResourceView(_depthBuffer, &srvDesc, srvstart);
 
-	heapstart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	srvstart = _lightSrvHeap->GetCPUDescriptorHandleForHeapStart();
 
-	_dev->CreateShaderResourceView(_depthBuffer, &srvDesc, srvstart);
+	_dev->CreateShaderResourceView(_lightBuffer, &srvDesc, srvstart);
 
 	return result;
 }
@@ -724,6 +739,7 @@ void Dx12Wrapper::DrawFirstPolygon()
 	// ヒープの開始位置を取得
 	auto heapStart = _rtvDescHeap2->GetCPUDescriptorHandleForHeapStart();// 二枚目のポリゴンに描画
 	auto depthStart = _dsvDescHeap->GetCPUDescriptorHandleForHeapStart();
+	auto lightStart = _lightDescHeap->GetCPUDescriptorHandleForHeapStart();
 
 	// バリアの情報設定
 	D3D12_RESOURCE_BARRIER BarrierDesc = {};
@@ -770,11 +786,10 @@ void Dx12Wrapper::DrawFirstPolygon()
 	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(1, dstart);
 
-	dstart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
 	// ライト深度のセット
-	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
-	_cmdList->SetGraphicsRootDescriptorTable(2, dstart);
+	auto lstart = _lightSrvHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_lightSrvHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(2, lstart);
 
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);
@@ -989,6 +1004,24 @@ void Dx12Wrapper::KeyUpDate()
 	_wvp.wvp *= _wvp.view;
 	_wvp.wvp *= _wvp.projection;
 
+	// ライト座標の算出
+
+	XMFLOAT3 lightpos;
+	XMStoreFloat3(&lightpos,
+		XMVector4Normalize(XMLoadFloat3(&lightVec)) * XMVector3Length(XMLoadFloat3(&target) - XMLoadFloat3(&eye)));//ライト座標
+
+	// ライトから注視点への行列の計算
+	XMMATRIX lightview = DirectX::XMMatrixLookAtLH(
+		DirectX::XMLoadFloat3(&lightpos),
+		DirectX::XMLoadFloat3(&target),
+		DirectX::XMLoadFloat3(&up)
+	);
+
+
+	lightview = DirectX::XMMatrixRotationY(angle)*lightview;
+
+	_wvp.lvp = lightview * lightproj;
+
 	*_wvpMP = _wvp;// 転送用に書き込む
 }
 
@@ -1007,19 +1040,19 @@ void Dx12Wrapper::ScreenUpDate()
 
 	// 深度バッファビューヒープの開始位置をとってくる
 	auto depthStart = _dsvDescHeap->GetCPUDescriptorHandleForHeapStart();
+	auto lightStart = _lightDescHeap->GetCPUDescriptorHandleForHeapStart();
 
 	auto peraStart = _rtvDescHeap->GetCPUDescriptorHandleForHeapStart();// 一枚目のポリゴンに描画
 	
 	_cmdAlloc->Reset();
 	_cmdList->Reset(_cmdAlloc, nullptr);//コマンドリストリセット
 
-	// シャドウ
-	// デプスステンシルのクリア
-	_cmdList->ClearDepthStencilView(depthStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-	depthStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	// シャドウの描画
+	// ライト深度のクリア
+	_cmdList->ClearDepthStencilView(lightStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	//レンダーターゲット設定
-	_cmdList->OMSetRenderTargets(0, nullptr, false, &depthStart);
+	_cmdList->OMSetRenderTargets(0, nullptr, false, &lightStart);
 
 	for (auto &model : pmxModels)
 	{
@@ -1027,7 +1060,8 @@ void Dx12Wrapper::ScreenUpDate()
 	}
 
 	// モデルの描画
-	depthStart = _dsvDescHeap->GetCPUDescriptorHandleForHeapStart();// 元に戻す
+	// カメラ深度のクリア
+	_cmdList->ClearDepthStencilView(depthStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	// リソースバリア
 	_cmdList->ResourceBarrier(1, &BarrierDesc);
@@ -1040,7 +1074,7 @@ void Dx12Wrapper::ScreenUpDate()
 	   	 
 	for (auto &model : pmxModels)
 	{
-		model->Draw(_cmdList, _wvpDescHeap);
+		model->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
 	}
 
 	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -1111,11 +1145,11 @@ int Dx12Wrapper::Init()
 
 	// モデル読み込み
 	pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミク.pmd");
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/2B/na_2b_0407.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));

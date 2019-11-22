@@ -54,9 +54,11 @@ float4 peraPS(Out o) : SV_TarGet
     else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.4))
     {
         float dep = lightdepth.Sample(smp, o.uv * 5);
-        dep = pow(dep, 100);
+        dep = pow(dep, 10);
         return 1-float4(dep, dep, dep, 1);
     }
 
-    return float4(float4(1, b, b, 1) * tex.Sample(smp, o.uv));
+    float dep = lightdepth.Sample(smp, o.uv);
+
+    return tex.Sample(smp, o.uv);
 }

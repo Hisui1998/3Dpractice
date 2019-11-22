@@ -81,6 +81,11 @@ private:
 	ID3D12DescriptorHeap* _dsvDescHeap;// 深度バッファデスクリプタヒープ
 	ID3D12DescriptorHeap* _dsvSrvHeap;// 深度SRVデスクリプタヒープ	
 
+	// シャドウバッファ
+	ID3D12Resource* _lightBuffer = nullptr;// 深度バッファ
+	ID3D12DescriptorHeap* _lightDescHeap;// 深度バッファデスクリプタヒープ
+	ID3D12DescriptorHeap* _lightSrvHeap;// 深度SRVデスクリプタヒープ	
+
 	// スワップチェイン用
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ
 	std::vector<ID3D12Resource*>renderTargets;// スワップチェインで使うバッファのRTV	
@@ -100,6 +105,8 @@ private:
 	DirectX::XMFLOAT3 eye;// 視点の座標
 	DirectX::XMFLOAT3 target;// どこを見ているかの座標
 	DirectX::XMFLOAT3 up;// 軸
+	DirectX::XMFLOAT3 lightVec;// ライトの平行光線の方向
+	DirectX::XMMATRIX lightproj;
 
 	std::shared_ptr<PMDmodel> pmdModel;
 	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
