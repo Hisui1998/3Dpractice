@@ -1389,7 +1389,7 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, 
 		list->SetGraphicsRootDescriptorTable(1, mathandle);
 
 		// •`‰æ•”
-		list->DrawIndexedInstanced(m.faceVerCnt, 2, offset, 0, 0);
+		list->DrawIndexedInstanced(m.faceVerCnt, 1, offset, 0, 0);
 
 		// ƒ|ƒCƒ“ƒ^‚Ì‰ÁŽZ
 		mathandle.ptr += incsize * 5;// 5–‡‚ ‚é‚©‚ç5”{

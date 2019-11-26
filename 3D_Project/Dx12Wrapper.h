@@ -10,6 +10,7 @@
 
 class PMDmodel;
 class PMXmodel;
+class Plane;
 
 // 行列の構造体
 struct WVPMatrix {
@@ -107,9 +108,11 @@ private:
 	DirectX::XMFLOAT3 up;// 軸
 	DirectX::XMFLOAT3 lightVec;// ライトの平行光線の方向
 	DirectX::XMMATRIX lightproj;
+	DirectX::XMFLOAT3 lightpos;
 
 	std::shared_ptr<PMDmodel> pmdModel;
 	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
+	std::shared_ptr<Plane> _plane;
 
 
 	/*板ポリ用関数(あとでクラスに分ける予定)*/

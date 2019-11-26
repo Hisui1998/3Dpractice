@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "PMDmodel.h"
 #include "PMXmodel.h"
+#include "Plane.h"
 
 #pragma comment(lib,"dinput8.lib")
 #pragma comment(lib,"dxguid.lib")
@@ -174,7 +175,6 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 	angle = 0.f;
 
 	// ライト座標の算出
-	XMFLOAT3 lightpos;
 	XMStoreFloat3(&lightpos,
 		XMVector4Normalize(XMLoadFloat3(&lightVec)) * XMVector3Length(XMLoadFloat3(&target) - XMLoadFloat3(&eye)));//ライト座標
 	
@@ -1006,9 +1006,9 @@ void Dx12Wrapper::KeyUpDate()
 
 	// ライト座標の算出
 
-	XMFLOAT3 lightpos;
+
 	XMStoreFloat3(&lightpos,
-		XMVector4Normalize(XMLoadFloat3(&lightVec)) * XMVector3Length(XMLoadFloat3(&target) - XMLoadFloat3(&eye)));//ライト座標
+		XMVector4Normalize(XMLoadFloat3(&lightVec)) * XMVectorSubtract(XMLoadFloat3(&target), XMLoadFloat3(&eye)));//ライト座標
 
 	// ライトから注視点への行列の計算
 	XMMATRIX lightview = DirectX::XMMatrixLookAtLH(
@@ -1018,7 +1018,7 @@ void Dx12Wrapper::KeyUpDate()
 	);
 
 
-	lightview = DirectX::XMMatrixRotationY(angle)*lightview;
+	lightview = DirectX::XMMatrixRotationY(-angle)*lightview;
 
 	_wvp.lvp = lightview * lightproj;
 
@@ -1076,6 +1076,8 @@ void Dx12Wrapper::ScreenUpDate()
 	{
 		model->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
 	}
+
+	_plane->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
 
 	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
@@ -1143,6 +1145,8 @@ int Dx12Wrapper::Init()
 	if (FAILED(DeviceInit()))
 		return 1;
 
+	_plane = std::make_shared<Plane>(_dev, _viewPort, _scissor);
+
 	// モデル読み込み
 	pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミク.pmd");
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
@@ -1153,6 +1157,7 @@ int Dx12Wrapper::Init()
 
 	/* Aポーズ(テスト用 */
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));
+
 
 	if (FAILED(CreateSwapChainAndCmdQue()))
 		return 2;

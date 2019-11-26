@@ -132,7 +132,7 @@ float4 ps(Out o):SV_TARGET
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;
     
-    float3 light = normalize(float3(1, -1, 1)); //光の向かうベクトル(平行光線)
+    float3 light = normalize(float3(-10, 20, -10)); //光の向かうベクトル(平行光線)
 
     //ディフューズ計算
     float diffuseB = saturate(dot(-light, o.normal));
@@ -150,19 +150,21 @@ float4 ps(Out o):SV_TARGET
     
     if (o.instNo == 1)
     {
-        //return float4(0, 0, 0, 1);
+        return float4(0, 0, 0, 1);
     }
     
-    float2 uv = (float2(1, -1) + o.svpos.xy) * float2(0.5, -0.5);
-    float depth = pow(shadowMap.Sample(smp, uv).z, 100);
-    float4 dbright = float4(1, 1, 1, 1);
-    if (o.pos.z > depth+0.00005f)
+    float2 shadowMapUV = mul(wvp,o.pos).xy;
+    shadowMapUV = (shadowMapUV + float2(1, -1)) * float2(0.5, -0.5);
+
+    float4 depth = pow(shadowMap.Sample(smp, shadowMapUV),100);
+    float3 dbright = float3(1, 1, 1);
+    if (o.pos.z > depth.z+0.005f)
     {
-        dbright *= 0;
+        dbright *= 0.5f;
     }
 
-	return saturate(texColor * diffuse * toonDif)
-                + saturate(float4(specularB * specular.rgb, o.instNo)) * dbright;
+    return saturate(texColor * diffuse * toonDif) * float4(dbright,1)
+                + saturate(float4(specularB * specular.rgb, o.instNo));
 
     //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
     //        + spa.Sample(smp, sphereMapUV) * texColor
