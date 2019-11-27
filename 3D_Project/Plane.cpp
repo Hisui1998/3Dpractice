@@ -69,9 +69,9 @@ bool Plane::CreateRootSignature()
 	// サンプラの設定
 	D3D12_STATIC_SAMPLER_DESC SamplerDesc[1] = {};
 	SamplerDesc[0].Filter = D3D12_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR;// 特別なフィルタを使用しない
-	SamplerDesc[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;// 画が繰り返し描画される
-	SamplerDesc[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	SamplerDesc[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	SamplerDesc[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;// 画が繰り返し描画される
+	SamplerDesc[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	SamplerDesc[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	SamplerDesc[0].MaxLOD = D3D12_FLOAT32_MAX;// 上限なし
 	SamplerDesc[0].MinLOD = 0.0f;// 下限なし
 	SamplerDesc[0].MipLODBias = 0.0f;// MIPMAPのバイアス
@@ -81,13 +81,13 @@ bool Plane::CreateRootSignature()
 
 	// レンジの設定
 	D3D12_DESCRIPTOR_RANGE descRange[2] = {};
-	//WVP
+	// WVP
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;//定数
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
 	descRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	//テクスチャ
+	// シャドウ
 	descRange[1].NumDescriptors = 1;
 	descRange[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;//シェーダーリソース
 	descRange[1].BaseShaderRegister = 0;//レジスタ番号
@@ -131,14 +131,15 @@ bool Plane::CreateRootSignature()
 
 bool Plane::CreateVertexBuffer()
 {
+	std::vector<unsigned short> indices = { 0,2,1,2,3,1 };
+	//頂点バッファ生成
 	PlaneVertex vertices[] = {
-		   XMFLOAT3(-20,0,-20),XMFLOAT2(0,1),//左下
-		   XMFLOAT3(-20,0,20),XMFLOAT2(0,0),//左上
-		   XMFLOAT3(20,0,-20),XMFLOAT2(1,1),//右下
-		   XMFLOAT3(20,0,20),XMFLOAT2(1,0),//右上
+		{DirectX::XMFLOAT3(-250,0,-250),DirectX::XMFLOAT2(0,1)},
+		{DirectX::XMFLOAT3(-250,0,250),DirectX::XMFLOAT2(0,0)},
+		{DirectX::XMFLOAT3(250,0,-250),DirectX::XMFLOAT2(1,1)},
+		{DirectX::XMFLOAT3(250,0,250),DirectX::XMFLOAT2(1,0)}
 	};
 
-	//ペラバッファ生成
 	auto result = _dev->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAG_NONE,
@@ -153,9 +154,35 @@ bool Plane::CreateVertexBuffer()
 	return SUCCEEDED(result);
 }
 
+bool Plane::CreateIndexBuffer()
+{
+	std::vector<unsigned short> indices = { 0,2,1,2,3,1 };
+
+	auto result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer((indices.size() * sizeof(indices[0]))),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&_indexBuffer)
+	);	// インデックスバッファのマッピング
+	_idView.BufferLocation = _indexBuffer->GetGPUVirtualAddress();//バッファの場所
+	_idView.Format = DXGI_FORMAT_R16_UINT;//フォーマット(shortだからR16)
+	_idView.SizeInBytes = indices.size() * sizeof(indices[0]);//総サイズ
+
+	unsigned short* idxMap = nullptr;
+	result = _indexBuffer->Map(0, nullptr, (void**)&idxMap);
+	std::copy(std::begin(indices), std::end(indices), idxMap);
+	_indexBuffer->Unmap(0, nullptr);
+
+	return SUCCEEDED(result);
+}
+
 Plane::Plane(ID3D12Device* dev, D3D12_VIEWPORT _view, D3D12_RECT scissor):_dev(dev),_viewPort(_view), _scissor(scissor)
 {
 	CreateVertexBuffer();
+
+	CreateIndexBuffer();
 
 	CreateRootSignature();
 
@@ -181,27 +208,25 @@ void Plane::Draw(ID3D12GraphicsCommandList * list, ID3D12DescriptorHeap * wvp, I
 	list->RSSetViewports(1, &_viewPort);
 	list->RSSetScissorRects(1, &_scissor);
 
-	// でスクリプターヒープのセット(Shadow)
-	list->SetDescriptorHeaps(1, &shadow);
-
-	// デスクリプタテーブルのセット(Shadow)
-	D3D12_GPU_DESCRIPTOR_HANDLE wvpStart = shadow->GetGPUDescriptorHandleForHeapStart();
+	// WVPのセット
+	auto wvpStart = wvp->GetGPUDescriptorHandleForHeapStart();
+	list->SetDescriptorHeaps(1, &wvp);
 	list->SetGraphicsRootDescriptorTable(0, wvpStart);
 
-
-	// でスクリプターヒープのセット(WVP)
-	list->SetDescriptorHeaps(1, &wvp);
-
-	// デスクリプタテーブルのセット(WVP)
-	D3D12_GPU_DESCRIPTOR_HANDLE shadowStart = wvp->GetGPUDescriptorHandleForHeapStart();
-	list->SetGraphicsRootDescriptorTable(0, shadowStart);
+	// Shadowのセット
+	auto shadowStart = shadow->GetGPUDescriptorHandleForHeapStart();
+	list->SetDescriptorHeaps(1, &shadow);
+	list->SetGraphicsRootDescriptorTable(1, shadowStart);
 
 	// 頂点バッファビューの設定
 	list->IASetVertexBuffers(0, 1, &_vbView);
 
+	// インデックスバッファビューの設定
+	list->IASetIndexBuffer(&_idView);
+
 	// トポロジーのセット
-	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// 描画部
-	list->DrawInstanced(4, 1, 0, 0);
+	list->DrawIndexedInstanced(6, 1, 0, 0, 0);
 }

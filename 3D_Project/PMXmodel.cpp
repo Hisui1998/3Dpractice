@@ -443,22 +443,23 @@ void PMXmodel::MorphUpDate(int frameno)
 	if (frameIt == morphData.rend())return;
 	// イテレータを反転させて次の要素をとってくる
 	auto nextIt = frameIt.base();
+
 	for (auto& nowmd:frameIt->second)
 	{
 		auto morphName = GetWstringFromString(nowmd.SkinName);
 		auto& morphVec = _morphData[morphName];
-		for (auto& mv : morphVec)
+		for (auto& nowMorph : morphVec)
 		{
+			// 次要素がなかった場合
 			if (nextIt == morphData.end()) {
-
-					vertexInfo[mv.vertexMorph.verIdx].pos.x =
-						firstVertexInfo[mv.vertexMorph.verIdx].pos.x + mv.vertexMorph.pos.x*nowmd.Weight;
-					vertexInfo[mv.vertexMorph.verIdx].pos.y =
-						firstVertexInfo[mv.vertexMorph.verIdx].pos.y + mv.vertexMorph.pos.y*nowmd.Weight;
-					vertexInfo[mv.vertexMorph.verIdx].pos.z =
-						firstVertexInfo[mv.vertexMorph.verIdx].pos.z + mv.vertexMorph.pos.z*nowmd.Weight;
+				// 今のモーフ情報をそのまま使う
+				XMStoreFloat3(&vertexInfo[nowMorph.vertexMorph.verIdx].pos,
+				XMVectorAdd(
+					XMLoadFloat3(&firstVertexInfo[nowMorph.vertexMorph.verIdx].pos),
+					XMLoadFloat3(&nowMorph.vertexMorph.pos)
+				)*nowmd.Weight);
 			}
-			else
+			else// 次要素があった場合
 			{
 				float pow = (static_cast<float>(frameno) - frameIt->first) / (nextIt->first - frameIt->first);
 
@@ -466,19 +467,19 @@ void PMXmodel::MorphUpDate(int frameno)
 				{
 					auto nextmorphName = GetWstringFromString(nextmd.SkinName);
 					auto& nextmorphVec = _morphData[nextmorphName];
-					auto addVec = mv.vertexMorph.pos;
+					auto addVec = nowMorph.vertexMorph.pos;
 					addVec.x*=nowmd.Weight;
 					addVec.y*=nowmd.Weight;
 					addVec.z*=nowmd.Weight;
-					auto addVec2 = mv.vertexMorph.pos;
+					auto addVec2 = nowMorph.vertexMorph.pos;
 					addVec2.x*=nextmd.Weight;
 					addVec2.y*=nextmd.Weight;
 					addVec2.z*=nextmd.Weight;
-					XMStoreFloat3(&vertexInfo[mv.vertexMorph.verIdx].pos,
+					XMStoreFloat3(&vertexInfo[nowMorph.vertexMorph.verIdx].pos,
 						XMVectorLerp(XMLoadFloat3(&addVec), XMLoadFloat3(&addVec2), pow));
-					vertexInfo[mv.vertexMorph.verIdx].pos.x += firstVertexInfo[mv.vertexMorph.verIdx].pos.x;
-					vertexInfo[mv.vertexMorph.verIdx].pos.y += firstVertexInfo[mv.vertexMorph.verIdx].pos.y;
-					vertexInfo[mv.vertexMorph.verIdx].pos.z += firstVertexInfo[mv.vertexMorph.verIdx].pos.z;
+					vertexInfo[nowMorph.vertexMorph.verIdx].pos.x += firstVertexInfo[nowMorph.vertexMorph.verIdx].pos.x;
+					vertexInfo[nowMorph.vertexMorph.verIdx].pos.y += firstVertexInfo[nowMorph.vertexMorph.verIdx].pos.y;
+					vertexInfo[nowMorph.vertexMorph.verIdx].pos.z += firstVertexInfo[nowMorph.vertexMorph.verIdx].pos.z;
 				}
 			}
 		}

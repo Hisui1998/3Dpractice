@@ -40,7 +40,7 @@ Texture2D<float4> spa : register(t2); //2 番スロットに設定されたテクスチャ
 // トゥーン
 Texture2D<float4> toon : register(t3); //3 番スロットに設定されたテクスチャ(トゥーン)
 // シャドウ
-Texture2D<float4> shadowMap : register(t4); //4 番スロットに設定されたテクスチャ(shadow)
+Texture2D<float> shadowMap : register(t4); //4 番スロットに設定されたテクスチャ(shadow)
 struct Out
 {
 	float4 pos              : POSITION;
@@ -104,10 +104,6 @@ Out vs(
     }
 
 	float4 movepos = mul(m, float4(pos, 1));
-	if (instNo == 1)
-	{
-       // movepos = mul(shadow, movepos);
-    }
 
     o.pos = mul(world, movepos);
     o.svpos = mul(wvp, movepos);
@@ -132,7 +128,7 @@ float4 ps(Out o):SV_TARGET
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;
     
-    float3 light = normalize(float3(-10, 20, -10)); //光の向かうベクトル(平行光線)
+    float3 light = normalize(float3(-5, 3, -5)); //光の向かうベクトル(平行光線)
 
     //ディフューズ計算
     float diffuseB = saturate(dot(-light, o.normal));
@@ -146,25 +142,23 @@ float4 ps(Out o):SV_TARGET
     float2 sphereMapUV = o.vnormal.xy;
     sphereMapUV = (sphereMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
-    float4 texColor = tex.Sample(smp, o.uv);
+    float4 texColor = tex.Sample(smp, o.uv);   
     
-    if (o.instNo == 1)
-    {
-        return float4(0, 0, 0, 1);
-    }
-    
-    float2 shadowMapUV = mul(wvp,o.pos).xy;
+    // シャドウマップ用UVの作成
+    float2 shadowMapUV = mul(lvp,o.pos).xy;
     shadowMapUV = (shadowMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
-    float4 depth = pow(shadowMap.Sample(smp, shadowMapUV),100);
-    float3 dbright = float3(1, 1, 1);
-    if (o.pos.z > depth.z+0.005f)
+    // 深度値の取得
+    float depth = pow(shadowMap.Sample(smp, shadowMapUV), 10);
+    
+    // 深度値の比較
+    float dbright = 1; // 影の強さ
+    if (o.pos.z > depth+10)
     {
-        dbright *= 0.5f;
+        //dbright *= 0.3f;
     }
 
-    return saturate(texColor * diffuse * toonDif) * float4(dbright,1)
-                + saturate(float4(specularB * specular.rgb, o.instNo));
+    return saturate(texColor * diffuse * toonDif) * float4(dbright.rrr, 1);
 
     //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
     //        + spa.Sample(smp, sphereMapUV) * texColor

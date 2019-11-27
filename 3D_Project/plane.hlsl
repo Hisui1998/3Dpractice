@@ -1,5 +1,5 @@
 //テクスチャ
-Texture2D<float4> tex : register(t0);
+Texture2D<float> shadowMap : register(t0);
 
 // サンプラ
 SamplerState smp : register(s0);
@@ -37,16 +37,21 @@ Out PlaneVS(
 //ピクセルシェーダ
 float4 PlanePS(Out o) : SV_Target
 {
-    float4 color = float4(1, 0.5, 0.8, 1);
+    float4 color = float4(1, 1, 1, 1);// 床の色
 
+    // シャドウマップ用UVの作成
     float2 shadowMapUV = o.pos.xy;
     shadowMapUV = (shadowMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
-    float depth = pow(tex.Sample(smp, shadowMapUV).z, 100);
-    float3 dbright = float3(1, 1, 1);
-    if (o.pos.z > depth + 0.005f)
+    // 深度値の取得
+    float depth = pow(shadowMap.Sample(smp, shadowMapUV),10);
+    
+    // 深度値の比較
+    float dbright = 1;// 影の強さ
+    if (o.pos.z > depth)
     {
-        dbright *= 0.9f;
+        dbright *= 0.3f;
     }
-    return color*float4(dbright, 1);
+    
+    return float4(color.rgb * dbright, color.a);
 }

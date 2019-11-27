@@ -83,13 +83,13 @@ Out shadowVS(
     float4 movepos = mul(m, float4(pos, 1));
     movepos = mul(shadow, movepos);
     o.pos = mul(world, movepos);
-    o.svpos = mul(wvp, movepos);
+    o.svpos = mul(lvp, movepos);
 
     return o;
 }
 
 // ピクセルシェーダ
-float4 shadowPS(float4 pos:POSITION) : SV_TARGET
-{
+float4 shadowPS() : SV_TARGET
+{    
    return  float4(1, 1, 1, 1);
 }

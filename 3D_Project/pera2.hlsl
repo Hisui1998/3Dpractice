@@ -26,5 +26,17 @@ Out pera2VS(
 //ピクセルシェーダ
 float4 pera2PS(Out o) : SV_Target
 {
-    return tex.Sample(smp, o.uv);
+    return tex.Sample(smp,o.uv);
+    
+    float w, h, level;
+    tex.GetDimensions(0, w, h, level);
+    float dx = 1 / w;
+    float dy = 1 / h;
+    float4 ret = tex.Sample(smp, o.uv);
+    float mag = 3;
+    
+    return float4(
+    tex.Sample(smp, o.uv + float2(-dx * mag, 0)).r,
+    tex.Sample(smp, o.uv + float2(dx * mag, 0)).g,
+    tex.Sample(smp, o.uv + float2(0, dy * mag)).ba);
 }

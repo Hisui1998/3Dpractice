@@ -170,7 +170,7 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 	up = XMFLOAT3(0,1,0);
 
 	auto plane = XMFLOAT4(0, 1, 0, 0);//平面の方程式
-	lightVec = XMFLOAT3(-10, 20, -10);// ライトの平行光線の方向
+	lightVec = XMFLOAT3(-5, 3, -5);// ライトの平行光線の方向
 
 	angle = 0.f;
 
@@ -410,7 +410,7 @@ HRESULT Dx12Wrapper::CreateFirstPolygon()
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 		D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
 		&desc,
-		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 		&clear,
 		IID_PPV_ARGS(&_peraBuffer));
 
@@ -468,7 +468,7 @@ HRESULT Dx12Wrapper::CreateSecondPolygon()
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 		D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
 		&desc,
-		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 		&clear,
 		IID_PPV_ARGS(&_peraBuffer2));
 
@@ -747,7 +747,7 @@ void Dx12Wrapper::DrawFirstPolygon()
 	BarrierDesc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 	BarrierDesc.Transition.pResource = _peraBuffer2;// 二枚目のポリゴンに描画
 	BarrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	
 	// コマンドアロケータとリストのリセット
@@ -796,7 +796,7 @@ void Dx12Wrapper::DrawFirstPolygon()
 
 	// バリアをもとに戻す
 	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 	_cmdList->ResourceBarrier(1, &BarrierDesc);
 
 	// リストのクローズ
@@ -998,17 +998,11 @@ void Dx12Wrapper::KeyUpDate()
 		DirectX::XMLoadFloat3(&target),
 		DirectX::XMLoadFloat3(&up));
 
-	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;// Y軸を基準に回転する
+	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;
 
 	_wvp.wvp = _wvp.world;
 	_wvp.wvp *= _wvp.view;
 	_wvp.wvp *= _wvp.projection;
-
-	// ライト座標の算出
-
-
-	XMStoreFloat3(&lightpos,
-		XMVector4Normalize(XMLoadFloat3(&lightVec)) * XMVectorSubtract(XMLoadFloat3(&target), XMLoadFloat3(&eye)));//ライト座標
 
 	// ライトから注視点への行列の計算
 	XMMATRIX lightview = DirectX::XMMatrixLookAtLH(
@@ -1016,11 +1010,6 @@ void Dx12Wrapper::KeyUpDate()
 		DirectX::XMLoadFloat3(&target),
 		DirectX::XMLoadFloat3(&up)
 	);
-
-
-	lightview = DirectX::XMMatrixRotationY(-angle)*lightview;
-
-	_wvp.lvp = lightview * lightproj;
 
 	*_wvpMP = _wvp;// 転送用に書き込む
 }
@@ -1035,7 +1024,7 @@ void Dx12Wrapper::ScreenUpDate()
 	BarrierDesc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 	BarrierDesc.Transition.pResource = _peraBuffer;// 一枚目のポリゴンに描画
 	BarrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
 	// 深度バッファビューヒープの開始位置をとってくる
@@ -1048,11 +1037,11 @@ void Dx12Wrapper::ScreenUpDate()
 	_cmdList->Reset(_cmdAlloc, nullptr);//コマンドリストリセット
 
 	// シャドウの描画
+	//レンダーターゲット設定
+	_cmdList->OMSetRenderTargets(0, nullptr, false, &lightStart);
 	// ライト深度のクリア
 	_cmdList->ClearDepthStencilView(lightStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	//レンダーターゲット設定
-	_cmdList->OMSetRenderTargets(0, nullptr, false, &lightStart);
 
 	for (auto &model : pmxModels)
 	{
@@ -1071,7 +1060,7 @@ void Dx12Wrapper::ScreenUpDate()
 
 	//レンダーターゲットのクリア
 	_cmdList->ClearRenderTargetView(peraStart, clearColor, 0, nullptr);
-	   	 
+
 	for (auto &model : pmxModels)
 	{
 		model->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
@@ -1080,7 +1069,7 @@ void Dx12Wrapper::ScreenUpDate()
 	_plane->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
 
 	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 
 	// リソースバリア
 	_cmdList->ResourceBarrier(1, &BarrierDesc);
@@ -1149,11 +1138,11 @@ int Dx12Wrapper::Init()
 
 	// モデル読み込み
 	pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミク.pmd");
-	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/2B/na_2b_0407.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/ヤゴコロダンス.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
 
 	/* Aポーズ(テスト用 */
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));

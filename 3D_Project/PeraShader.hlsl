@@ -58,7 +58,5 @@ float4 peraPS(Out o) : SV_TarGet
         return 1-float4(dep, dep, dep, 1);
     }
 
-    float dep = lightdepth.Sample(smp, o.uv);
-
-    return tex.Sample(smp, o.uv);
+    return float4(1, b, b, 1) * tex.Sample(smp, o.uv);
 }
