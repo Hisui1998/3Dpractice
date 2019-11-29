@@ -51,6 +51,7 @@ HRESULT Dx12Wrapper::DeviceInit()
 	result =  _keyBoadDev->SetDataFormat(&c_dfDIKeyboard);
 	result = _keyBoadDev->SetCooperativeLevel(_hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
 
+
 	return result;
 }
 
@@ -164,14 +165,8 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 	auto result = _dev->CreateDescriptorHeap(&wvpDesc,IID_PPV_ARGS(&_wvpDescHeap));
 	auto wsize = Application::Instance().GetWindowSize();
 
-	// 座標の初期値
-	eye = XMFLOAT3(0,10,-20);
-	target = XMFLOAT3(0, 10,0);
-	up = XMFLOAT3(0,1,0);
-
 	auto plane = XMFLOAT4(0, 1, 0, 0);//平面の方程式
-	lightVec = XMFLOAT3(-5, 3, -5);// ライトの平行光線の方向
-
+	lightVec = XMFLOAT3(-10, 20, 15);// ライトの平行光線の方向
 	angle = 0.f;
 
 	// ライト座標の算出
@@ -344,6 +339,69 @@ void Dx12Wrapper::ExecuteCommand()
 	_cmdQue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&_cmdList);
 	_cmdQue->Signal(_fence, ++_fenceValue);
 }
+
+
+void Dx12Wrapper::SetEfkRenderer()
+{
+	auto wsize = Application::Instance().GetWindowSize();
+	// エフェクシアのレンダラを作る
+	DXGI_FORMAT bbFormat = DXGI_FORMAT_R8G8B8A8_UNORM;// バックバッファのフォーマット
+	_efkRenderer = EffekseerRendererDX12::Create(
+		_dev,// デバイス
+		_cmdQue,// コマンドキュー
+		2,// バックバッファの数
+		&bbFormat,// バックバッファのフォーマット
+		1,// レンダーターゲットの数
+		false,// デプスありか
+		false,// 反対デプスありか
+		2000// パーティクル数
+	);
+
+	_efkManager = Effekseer::Manager::Create(2000);
+
+	_efkManager->SetCoordinateSystem(Effekseer::CoordinateSystem::LH);
+
+	// 描画用インスタンスから描画機能を設定
+	_efkManager->SetSpriteRenderer(_efkRenderer->CreateSpriteRenderer());// スプライト
+	_efkManager->SetRibbonRenderer(_efkRenderer->CreateRibbonRenderer());// リボンぽいやつ
+	_efkManager->SetRingRenderer(_efkRenderer->CreateRingRenderer());// リング
+	_efkManager->SetTrackRenderer(_efkRenderer->CreateTrackRenderer());// 軌跡(トラッキング)
+	_efkManager->SetModelRenderer(_efkRenderer->CreateModelRenderer());// モデル
+
+	// 描画用インスタンスからテクスチャの読込機能を設定
+	_efkManager->SetTextureLoader(_efkRenderer->CreateTextureLoader());
+	_efkManager->SetModelLoader(_efkRenderer->CreateModelLoader());
+
+	// エフェクト発生位置を設定
+	auto efkPos = ::Effekseer::Vector3D(0, 0.0f, 0.0f);
+
+	//メモリプール
+	_efkMemoryPool = EffekseerRendererDX12::CreateSingleFrameMemoryPool(_efkRenderer);
+
+	//コマンドリスト作成
+	_efkCmdList = EffekseerRendererDX12::CreateCommandList(_efkRenderer, _efkMemoryPool);
+
+	//コマンドリストセット
+	_efkRenderer->SetCommandList(_efkCmdList);
+
+	// 投影行列を設定
+	_efkRenderer->SetProjectionMatrix(
+		Effekseer::Matrix44().PerspectiveFovRH(45.0f / 180.0f * 3.14f, wsize.width / wsize.height, 1.0f, 1000.0f)
+	);
+
+	// カメラ行列を設定
+	_efkRenderer->SetCameraMatrix(
+		Effekseer::Matrix44().LookAtRH(
+			Effekseer::Vector3D(eye.x, eye.y, eye.z),
+			Effekseer::Vector3D(target.x, target.y, target.z),
+			Effekseer::Vector3D(up.x, up.y, up.z)
+		)
+	);
+
+	// エフェクトの読込
+	_effect = Effekseer::Effect::Create(_efkManager, (const EFK_CHAR*)L"effect/testes.efk");
+}
+
 
 /* ポリゴン系関数(あとでクラスに分ける予定) */
 // 板ポリ用の頂点バッファ作成
@@ -871,6 +929,10 @@ void Dx12Wrapper::DrawSecondPolygon()
 // コンストラクタ
 Dx12Wrapper::Dx12Wrapper(HWND hwnd) :_hwnd(hwnd)
 {
+	// 座標の初期値
+	eye = XMFLOAT3(0, 10, -25);
+	target = XMFLOAT3(0, 10, 0);
+	up = XMFLOAT3(0, 1, 0);
 	// イニシャライズ
 	auto result = CoInitializeEx(0, COINIT_MULTITHREADED);
 }
@@ -910,6 +972,15 @@ void Dx12Wrapper::KeyUpDate()
 	if (key[DIK_ESCAPE])
 	{
 		PostQuitMessage(0);
+	}
+
+	if (key[DIK_SPACE])
+	{
+		if (_efkManager->Exists(_efkHandle)) {
+			_efkManager->StopEffect(_efkHandle);
+		}
+		_efkHandle = _efkManager->Play(_effect, Effekseer::Vector3D(0, 0, 0));
+		_efkManager->SetScale(_efkHandle, 3, 3, 3);
 	}
 
 	if (key[DIK_UP])
@@ -1039,9 +1110,9 @@ void Dx12Wrapper::ScreenUpDate()
 	// シャドウの描画
 	//レンダーターゲット設定
 	_cmdList->OMSetRenderTargets(0, nullptr, false, &lightStart);
+
 	// ライト深度のクリア
 	_cmdList->ClearDepthStencilView(lightStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
 
 	for (auto &model : pmxModels)
 	{
@@ -1061,12 +1132,20 @@ void Dx12Wrapper::ScreenUpDate()
 	//レンダーターゲットのクリア
 	_cmdList->ClearRenderTargetView(peraStart, clearColor, 0, nullptr);
 
+	_plane->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
+
+	_efkManager->Update();
+	_efkMemoryPool->NewFrame();
+	::EffekseerRendererDX12::BeginCommandList(_efkCmdList, _cmdList);
+	_efkRenderer->BeginRendering();
+	_efkManager->Draw();
+	_efkRenderer->EndRendering();
+	::EffekseerRendererDX12::EndCommandList(_efkCmdList);
 	for (auto &model : pmxModels)
 	{
 		model->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
 	}
 
-	_plane->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
 
 	BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
@@ -1138,15 +1217,20 @@ int Dx12Wrapper::Init()
 
 	// モデル読み込み
 	pmdModel = std::make_shared<PMDmodel>(_dev, "model/PMD/初音ミク.pmd");
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン.pmx", "VMD/45秒MIKU.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/2B/na_2b_0407.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));
 
+
+	SetEfkRenderer();
+	_efkHandle = _efkManager->Play(_effect, Effekseer::Vector3D(0, 0, 0));
+	_efkManager->SetScale(_efkHandle, 3, 3, 3);
 
 	if (FAILED(CreateSwapChainAndCmdQue()))
 		return 2;

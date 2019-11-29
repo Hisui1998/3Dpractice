@@ -69,7 +69,7 @@ bool Plane::CreateRootSignature()
 	// サンプラの設定
 	D3D12_STATIC_SAMPLER_DESC SamplerDesc[1] = {};
 	SamplerDesc[0].Filter = D3D12_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR;// 特別なフィルタを使用しない
-	SamplerDesc[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;// 画が繰り返し描画される
+	SamplerDesc[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	SamplerDesc[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	SamplerDesc[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 	SamplerDesc[0].MaxLOD = D3D12_FLOAT32_MAX;// 上限なし

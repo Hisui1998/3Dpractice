@@ -19,7 +19,6 @@ Application::Application()
 {
 }
 
-
 Application::~Application()
 {
 }
@@ -63,7 +62,6 @@ int Application::Init()
 
 	_dx12 = std::make_shared<Dx12Wrapper>(_hwnd);
 	if (int i = _dx12->Init())return i;
-
 	return 0;
 }
 
@@ -80,6 +78,7 @@ void Application::Run()
 		if (msg.message == WM_QUIT) {// I—¹
 			break;
 		}
+
 		_dx12->UpDate();// •`‰æ
 	}
 }

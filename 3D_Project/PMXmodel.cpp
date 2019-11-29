@@ -365,7 +365,6 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	CreateBoneTree();
 
 	result = CreateBoneBuffer();
-
 }
 
 void PMXmodel::BufferUpDate()
@@ -450,37 +449,43 @@ void PMXmodel::MorphUpDate(int frameno)
 		auto& morphVec = _morphData[morphName];
 		for (auto& nowMorph : morphVec)
 		{
-			// 次要素がなかった場合
-			if (nextIt == morphData.end()) {
-				// 今のモーフ情報をそのまま使う
-				XMStoreFloat3(&vertexInfo[nowMorph.vertexMorph.verIdx].pos,
-				XMVectorAdd(
-					XMLoadFloat3(&firstVertexInfo[nowMorph.vertexMorph.verIdx].pos),
-					XMLoadFloat3(&nowMorph.vertexMorph.pos)
-				)*nowmd.Weight);
-			}
-			else// 次要素があった場合
+			int idx = 0;
+			if (_morphHeaders[morphName].type == 1)
 			{
-				float pow = (static_cast<float>(frameno) - frameIt->first) / (nextIt->first - frameIt->first);
-
-				for (auto& nextmd : nextIt->second)
-				{
-					auto nextmorphName = GetWstringFromString(nextmd.SkinName);
-					auto& nextmorphVec = _morphData[nextmorphName];
-					auto addVec = nowMorph.vertexMorph.pos;
-					addVec.x*=nowmd.Weight;
-					addVec.y*=nowmd.Weight;
-					addVec.z*=nowmd.Weight;
-					auto addVec2 = nowMorph.vertexMorph.pos;
-					addVec2.x*=nextmd.Weight;
-					addVec2.y*=nextmd.Weight;
-					addVec2.z*=nextmd.Weight;
+				// 次要素がなかった場合
+				if (nextIt == morphData.end()) {
+					// 今のモーフ情報をそのまま使う
 					XMStoreFloat3(&vertexInfo[nowMorph.vertexMorph.verIdx].pos,
-						XMVectorLerp(XMLoadFloat3(&addVec), XMLoadFloat3(&addVec2), pow));
-					vertexInfo[nowMorph.vertexMorph.verIdx].pos.x += firstVertexInfo[nowMorph.vertexMorph.verIdx].pos.x;
-					vertexInfo[nowMorph.vertexMorph.verIdx].pos.y += firstVertexInfo[nowMorph.vertexMorph.verIdx].pos.y;
-					vertexInfo[nowMorph.vertexMorph.verIdx].pos.z += firstVertexInfo[nowMorph.vertexMorph.verIdx].pos.z;
+						XMLoadFloat3(&firstVertexInfo[nowMorph.vertexMorph.verIdx].pos)
+					);
 				}
+				else// 次要素があった場合
+				{
+					// 重み計算
+					float pow = (static_cast<float>(frameno) - frameIt->first) / (nextIt->first - frameIt->first);
+
+					// 今の表情情報を格納
+					auto addVec = XMLoadFloat3(&nowMorph.vertexMorph.pos)*nowmd.Weight;
+					for (auto& nextmd : nextIt->second)
+					{
+						// 次の表情情報を格納
+						auto addVec2 = XMLoadFloat3(&nowMorph.vertexMorph.pos)*nextmd.Weight;
+
+						// 今の表情と次の表情を線形補完して座標に適応する
+						XMStoreFloat3(&vertexInfo[nowMorph.vertexMorph.verIdx].pos,
+							XMVectorLerp(addVec, addVec2, pow));
+
+						XMStoreFloat3(&vertexInfo[nowMorph.vertexMorph.verIdx].pos,
+							XMVectorAdd(
+								XMLoadFloat3(&vertexInfo[nowMorph.vertexMorph.verIdx].pos),
+								XMLoadFloat3(&firstVertexInfo[nowMorph.vertexMorph.verIdx].pos))
+						);
+					}
+				}
+			}
+			else if (_morphHeaders[morphName].type == 2)
+			{
+				RotationMatrix(morphName, nowMorph.boneMorph.rotation);
 			}
 		}
 	}
@@ -1348,13 +1353,6 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, 
 	list->RSSetViewports(1, &_viewPort);
 	list->RSSetScissorRects(1, &_scissor);
 
-	// でスクリプターヒープのセット(WVP)
-	list->SetDescriptorHeaps(1, &wvp);
-
-	// デスクリプタテーブルのセット(WVP)
-	D3D12_GPU_DESCRIPTOR_HANDLE wvpStart = wvp->GetGPUDescriptorHandleForHeapStart();
-	list->SetGraphicsRootDescriptorTable(0, wvpStart);
-
 	// モデル描画
 	// インデックスバッファビューの設定
 	list->IASetIndexBuffer(&_idxView);
@@ -1369,6 +1367,13 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, 
 	auto boneheap = _boneHeap;
 	auto materialheap = _matDescHeap;
 
+	// でスクリプターヒープのセット(WVP)
+	list->SetDescriptorHeaps(1, &wvp);
+
+	// デスクリプタテーブルのセット(WVP)
+	D3D12_GPU_DESCRIPTOR_HANDLE wvpStart = wvp->GetGPUDescriptorHandleForHeapStart();
+	list->SetGraphicsRootDescriptorTable(0, wvpStart);
+
 	// デスクリプタヒープのセット(ボーン) 
 	list->SetDescriptorHeaps(1, &boneheap);
 
@@ -1376,15 +1381,21 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, 
 	auto bohandle = boneheap->GetGPUDescriptorHandleForHeapStart();
 	list->SetGraphicsRootDescriptorTable(2, bohandle);
 
+	// でスクリプターのセット(shadow)
+	list->SetDescriptorHeaps(1, &shadow);
+	auto shadowStart = shadow->GetGPUDescriptorHandleForHeapStart();
+	list->SetGraphicsRootDescriptorTable(3, shadowStart);
+
+	// 描画ループ
 	// マテリアルのデスクリプタヒープのセット
 	list->SetDescriptorHeaps(1, &materialheap);
 
-	// 描画ループ
 	// デスクリプターハンドル一枚のサイズ取得
 	int incsize = _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	// マテリアルヒープの開始位置取得
 	auto mathandle = materialheap->GetGPUDescriptorHandleForHeapStart();
+
 	for (auto& m : _materials) {
 		// デスクリプタテーブルのセット
 		list->SetGraphicsRootDescriptorTable(1, mathandle);
@@ -1398,13 +1409,6 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, 
 		// 変数の加算
 		offset += m.faceVerCnt;
 	}
-
-	// でスクリプターヒープのセット(shadow)
-	list->SetDescriptorHeaps(1, &shadow);
-
-	// デスクリプタテーブルのセット(shadow)
-	auto shadowStart = shadow->GetGPUDescriptorHandleForHeapStart();
-	list->SetGraphicsRootDescriptorTable(0, shadowStart);
 }
 
 const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()

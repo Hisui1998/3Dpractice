@@ -28,7 +28,7 @@ Out PlaneVS(
     float2 uv : TEXCOORD)
 {
     Out o;
-    o.pos = mul(lvp, pos);
+    o.pos = mul(world, pos);
     o.svpos = mul(wvp, pos);
     o.uv = uv;
     return o;
@@ -37,18 +37,18 @@ Out PlaneVS(
 //ピクセルシェーダ
 float4 PlanePS(Out o) : SV_Target
 {
-    float4 color = float4(1, 1, 1, 1);// 床の色
-
+    float4 color = float4(1, 0.9, 1, 1);// 床の色
+    
     // シャドウマップ用UVの作成
-    float2 shadowMapUV = o.pos.xy;
+    float2 shadowMapUV = mul(lvp,o.pos).xy;
     shadowMapUV = (shadowMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
     // 深度値の取得
-    float depth = pow(shadowMap.Sample(smp, shadowMapUV),10);
+    float depth = pow(shadowMap.Sample(smp, shadowMapUV), 10);
     
     // 深度値の比較
     float dbright = 1;// 影の強さ
-    if (o.pos.z > depth)
+    if (mul(lvp, o.pos).z > depth)
     {
         dbright *= 0.3f;
     }

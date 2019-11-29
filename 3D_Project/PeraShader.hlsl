@@ -57,6 +57,7 @@ float4 peraPS(Out o) : SV_TarGet
         dep = pow(dep, 100);
         return 1-float4(dep, dep, dep, 1);
     }
-
+    
+    return tex.Sample(smp, o.uv);
     return float4(1, b, b, 1) * tex.Sample(smp, o.uv);
 }

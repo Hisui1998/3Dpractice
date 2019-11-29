@@ -7,6 +7,11 @@
 #include <DirectXMath.h>
 #include <vector>
 #include <map>
+#include <Effekseer.h>
+#include <EffekseerRendererDX12.h>
+#pragma comment(lib,"LLGI.lib")
+#pragma comment(lib,"Effekseer.lib")
+#pragma comment(lib,"EffekseerRendererDX12.lib")
 
 class PMDmodel;
 class PMXmodel;
@@ -115,6 +120,14 @@ private:
 	std::shared_ptr<Plane> _plane;
 
 
+	void SetEfkRenderer();
+	EffekseerRenderer::Renderer* _efkRenderer = nullptr;
+	Effekseer::Manager* _efkManager = nullptr;
+	EffekseerRenderer::SingleFrameMemoryPool* _efkMemoryPool;
+	EffekseerRenderer::CommandList* _efkCmdList;
+	Effekseer::Effect* _effect;
+	Effekseer::Handle _efkHandle;
+
 	/*板ポリ用関数(あとでクラスに分ける予定)*/
 	// 板ポリゴン用の頂点バッファの作成
 	HRESULT CreatePolygonVertexBuffer();
@@ -180,4 +193,9 @@ public:
 
 	// 更新
 	void UpDate();
+
+	ID3D12Device* Device() { return _dev; };
+	ID3D12CommandQueue* CmdQue() { return _cmdQue; };
+	ID3D12GraphicsCommandList* CmdList() { return _cmdList; };
+	ID3D12CommandAllocator* CmdAlloc() { return _cmdAlloc; };
 };

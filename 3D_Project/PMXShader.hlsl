@@ -128,10 +128,10 @@ float4 ps(Out o):SV_TARGET
     float3 eye = float3(0, 20, -20);
     float3 ray = o.pos.xyz - eye;
     
-    float3 light = normalize(float3(-5, 3, -5)); //光の向かうベクトル(平行光線)
+    float3 light = normalize(float3(-10, 20, -15)); //光の向かうベクトル(平行光線)
 
     //ディフューズ計算
-    float diffuseB = saturate(dot(-light, o.normal));
+    float diffuseB = saturate(dot(-light, o.normal));// 光の反射ベクトル
     float4 toonDif = toon.Sample(smpToon, float2(0, 1 - diffuseB));
 
     //光の反射ベクトル
@@ -145,20 +145,21 @@ float4 ps(Out o):SV_TARGET
     float4 texColor = tex.Sample(smp, o.uv);   
     
     // シャドウマップ用UVの作成
-    float2 shadowMapUV = mul(lvp,o.pos).xy;
+    float4 shadowpos = mul(lvp, o.pos);
+    float2 shadowMapUV = shadowpos.xy;
     shadowMapUV = (shadowMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
     // 深度値の取得
-    float depth = pow(shadowMap.Sample(smp, shadowMapUV), 10);
+    float depth = shadowMap.Sample(smp, shadowMapUV);
     
     // 深度値の比較
     float dbright = 1; // 影の強さ
-    if (o.pos.z > depth+10)
+    if (shadowpos.z >= depth)
     {
-        //dbright *= 0.3f;
+        toonDif = toon.Sample(smpToon, float2(0, 1 - diffuseB));
     }
 
-    return saturate(texColor * diffuse * toonDif) * float4(dbright.rrr, 1);
+    return saturate(texColor * diffuse * toonDif);
 
     //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
     //        + spa.Sample(smp, sphereMapUV) * texColor

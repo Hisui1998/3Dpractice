@@ -30,6 +30,7 @@ private:
 	};
 	static std::unique_ptr<Application, AppDeleter> _instance;
 	std::shared_ptr<Dx12Wrapper> _dx12;
+
 public:
 	~Application();
 	static Application& Instance();

@@ -81,7 +81,7 @@ Out shadowVS(
     }
 
     float4 movepos = mul(m, float4(pos, 1));
-    movepos = mul(shadow, movepos);
+    //movepos = mul(shadow, movepos);
     o.pos = mul(world, movepos);
     o.svpos = mul(lvp, movepos);
 
