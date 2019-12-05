@@ -25,6 +25,20 @@ struct PMXVertexInfo {
 	float edge;
 };
 
+// IK情報
+struct IKdata {
+	int boneIdx;// 
+	int loopCnt;// IKループ回数
+	float limrad;// IKループ計算時の制限角度
+	int linkNum;// 後続の要素数
+
+	int linkboneIdx;// リンク先のボーンインデックス
+	char isRadlim;// 角度制限を付けるかどうか
+
+	XMFLOAT3 minRadlim;// 角度制限下限
+	XMFLOAT3 maxRadlim;// 角度制限上限
+};
+
 // 戦犯
 #pragma pack(1)
 // PMXファイルのヘッダ情報
@@ -126,19 +140,7 @@ struct BoneInfo {
 
 	int key;// Key値
 
-	// IK情報
-	struct IKdata {
-		int boneIdx;
-		int loopCnt;// IKループ回数
-		float limrad;// IKループ計算時の制限角度
-		int linkNum;// 後続の要素数
-
-		int linkboneIdx;// リンク先のボーンインデックス
-		char isRadlim;// 角度制限を付けるかどうか
-
-		XMFLOAT3 minRadlim;// 角度制限下限
-		XMFLOAT3 maxRadlim;// 角度制限上限
-	}IkData;
+	IKdata ikdata;// IKのデータ
 };
 #pragma pack()
 
@@ -172,10 +174,22 @@ private:
 
 	void MorphUpDate(int frameno);
 
-	void IKBoneRecursive(int frameno);
-
 	void CreateBoneTree();
 
+	void SolveIK();
+
+	void SolveCCDIK(BoneInfo& ik);
+
+	void SolveCosineIK(BoneInfo& ik);
+
+	void SolveLookAt(BoneInfo& ik);
+
+	// Z軸を特定の方向に向かせる
+	XMMATRIX LookAtMatrix(const XMVECTOR& lookat, XMFLOAT3& up, XMFLOAT3& right);
+
+	// 任意の軸を任意の方向へ向かせる
+	XMMATRIX LookAtMatrix(const XMVECTOR& origin, const XMVECTOR& lookat, XMFLOAT3& up, XMFLOAT3& right);
+	
 	// パイプラインの生成
 	HRESULT CreatePipeline();
 
@@ -273,6 +287,9 @@ private:
 	std::map<std::wstring, PMXBoneNode> _boneTree;//ボーン名から子のノードを取得できる
 	std::vector<XMMATRIX>_boneMats;// ボーン行列(中身はボーンインデックス順)
 	XMMATRIX* _sendBone = nullptr;// ボーン行列の転送用ポインタ
+	std::vector<PMXBoneNode*> _boneNodeAddressArray;//indexからノード検索する
+
+	//std::map<IKdata>
 
 	ID3D12DescriptorHeap* _boneHeap;// ボーンヒープ
 
@@ -287,10 +304,10 @@ public:
 	void UpDate(char key[256]);
 
 	// 描画関数(リストと深度バッファヒープ位置とWVP定数バッファ)
-	void Draw(ID3D12GraphicsCommandList* list,ID3D12DescriptorHeap* constant,ID3D12DescriptorHeap*shadow);
+	void Draw(ID3D12GraphicsCommandList* list,ID3D12DescriptorHeap* constant,ID3D12DescriptorHeap*shadow,unsigned int instanceNum=1);
 
 	// シャドウ深度の描画
-	void PreDrawShadow(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp);
+	void PreDrawShadow(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, unsigned int instanceNum = 1);
 
 	std::vector<PMXMaterial> GetMaterials() { return _materials; };
 

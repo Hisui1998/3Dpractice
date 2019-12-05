@@ -12,9 +12,9 @@ cbuffer mat : register(b0)
     matrix world;
     matrix view;
     matrix projection;
-	matrix shadow;
     matrix wvp;
     matrix lvp;
+    float3 lightPos;
 };
 
 // マテリアル
@@ -59,8 +59,14 @@ struct Out
 
     int4 boneno : BONENO0;
 
-	float4 weight      : WEIGHT0;
-	uint instNo : INSTID;
+    float4 weight : WEIGHT0;
+    uint instNo : INSTID;
+};
+
+struct PixelOut
+{
+    float4 zero : SV_TARGET0;
+    float4 one : SV_TARGET1;
 };
 
 // 頂点シェーダ
@@ -76,12 +82,12 @@ Out vs(
 	int4 boneno : BONENO,
 
 	float4 weight : WEIGHT,
-	uint instNo : SV_InstanceID
+    uint instNo : SV_InstanceID
 )
 /*頂点シェーダ*/
 {
     Out o;
-	matrix m = boneMats[boneno.x];// ウェイト1.0の固定値
+    matrix m = boneMats[boneno.x]; // ウェイト1.0の固定値
     if (weighttype == 1)
     {
         m =
@@ -102,12 +108,20 @@ Out vs(
         boneMats[boneno.x] * float(weight.x) +
         boneMats[boneno.y] * (1.0f - float(weight.x));
     }
-
-	float4 movepos = mul(m, float4(pos, 1));
-
-    o.pos = mul(world, movepos);
+    
+    m._m03 += 10 * (instNo % 5);
+    m._m23 += 10 * (instNo / 5);
+    
+    float4 movepos = mul(m, float4(pos, 1));
+    
+    o.pos = mul(world,movepos);    
+    
     o.svpos = mul(wvp, movepos);
+    
+    //o.svpos.x += 10 * instNo;
+    
     o.uv = uv;
+    
     o.normal = mul(world, float4(normal, 1));
     o.vnormal = mul(view, float4(o.normal, 1));
 
@@ -117,22 +131,23 @@ Out vs(
 
     o.weight = weight;
     o.instNo = instNo;
-
+    
 	return o;
 }
 
 // ピクセルシェーダ
-float4 ps(Out o):SV_TARGET
+PixelOut ps(Out o)
 {
+    PixelOut po;
     // 視線ベクトル
-    float3 eye = float3(0, 20, -20);
+    float3 eye = float3(0, 10, -25);
     float3 ray = o.pos.xyz - eye;
     
-    float3 light = normalize(float3(-10, 20, -15)); //光の向かうベクトル(平行光線)
+    float3 light = normalize(lightPos); //光の向かうベクトル(平行光線)
 
     //ディフューズ計算
     float diffuseB = saturate(dot(-light, o.normal));// 光の反射ベクトル
-    float4 toonDif = toon.Sample(smpToon, float2(0, 1 - diffuseB));
+    float4 toonDif = toon.Sample(smpToon, float2(0, 0));
 
     //光の反射ベクトル
     float3 refLight = normalize(reflect(light, o.normal.xyz));
@@ -153,13 +168,17 @@ float4 ps(Out o):SV_TARGET
     float depth = shadowMap.Sample(smp, shadowMapUV);
     
     // 深度値の比較
-    float dbright = 1; // 影の強さ
-    if (shadowpos.z >= depth)
+    float dbright = 1;// 影の強さ
+    if (shadowpos.z >= depth + 0.00005f)
     {
-        toonDif = toon.Sample(smpToon, float2(0, 1 - diffuseB));
+        //texColor.rgb *= 0.5;
+        toonDif = toon.Sample(smpToon, float2(0, 1));
     }
-
-    return saturate(texColor * diffuse * toonDif);
+    po.zero = saturate(texColor * diffuse * toonDif);
+    po.one = float4(o.normal, 1);
+    
+    return po;
+    //return saturate(texColor * diffuse * toonDif);
 
     //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
     //        + spa.Sample(smp, sphereMapUV) * texColor

@@ -30,7 +30,16 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	for (int i = 0; i < 4; ++i)
 	{
 		fread(&idx[i], sizeof(int), 1, fp);
-		fseek(fp, idx[i], SEEK_CUR);
+
+		std::string str;
+		str.resize(idx[i] / 2);
+		for (int num = 0; num < idx[i] / 2; ++num)
+		{
+			wchar_t c;
+			fread(&c, sizeof(wchar_t), 1, fp);
+			str.push_back(c);
+		}
+		std::cout << str.c_str() << std::endl;
 	}
 	
 	int vertexNum=0;
@@ -217,20 +226,20 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 		// IKデータ
 		if (_bones[idx].bitFlag & 0x0020)
 		{
-			fread(&_bones[idx].IkData.boneIdx, header.data[5], 1, fp);
-			fread(&_bones[idx].IkData.loopCnt, sizeof(_bones[idx].IkData.loopCnt), 1, fp);
-			fread(&_bones[idx].IkData.limrad, sizeof(_bones[idx].IkData.limrad), 1, fp);
+			fread(&_bones[idx].ikdata.boneIdx, header.data[5], 1, fp);
+			fread(&_bones[idx].ikdata.loopCnt, sizeof(_bones[idx].ikdata.loopCnt), 1, fp);
+			fread(&_bones[idx].ikdata.limrad, sizeof(_bones[idx].ikdata.limrad), 1, fp);
 
 			// IKリンク
-			fread(&_bones[idx].IkData.linkNum, sizeof(_bones[idx].IkData.linkNum), 1, fp);
-			for (int num = 0;num< _bones[idx].IkData.linkNum;++num)
+			fread(&_bones[idx].ikdata.linkNum, sizeof(_bones[idx].ikdata.linkNum), 1, fp);
+			for (int num = 0;num< _bones[idx].ikdata.linkNum;++num)
 			{
-				fread(&_bones[idx].IkData.linkboneIdx, header.data[5], 1, fp);
-				fread(&_bones[idx].IkData.isRadlim, sizeof(_bones[idx].IkData.isRadlim), 1, fp);
-				if (_bones[idx].IkData.isRadlim)
+				fread(&_bones[idx].ikdata.linkboneIdx, header.data[5], 1, fp);
+				fread(&_bones[idx].ikdata.isRadlim, sizeof(_bones[idx].ikdata.isRadlim), 1, fp);
+				if (_bones[idx].ikdata.isRadlim)
 				{
-					fread(&_bones[idx].IkData.minRadlim, sizeof(_bones[idx].IkData.minRadlim), 1, fp);
-					fread(&_bones[idx].IkData.maxRadlim, sizeof(_bones[idx].IkData.maxRadlim), 1, fp);
+					fread(&_bones[idx].ikdata.minRadlim, sizeof(_bones[idx].ikdata.minRadlim), 1, fp);
+					fread(&_bones[idx].ikdata.maxRadlim, sizeof(_bones[idx].ikdata.maxRadlim), 1, fp);
 				}
 			}
 		}
@@ -491,29 +500,23 @@ void PMXmodel::MorphUpDate(int frameno)
 	}
 }
 
-void PMXmodel::IKBoneRecursive(int frameno)
-{
-
-}
-
-
-void PMXmodel::PreDrawShadow(ID3D12GraphicsCommandList * list, ID3D12DescriptorHeap * wvp)
+void PMXmodel::PreDrawShadow(ID3D12GraphicsCommandList * list, ID3D12DescriptorHeap * wvp,unsigned int instanceNum)
 {
 	float clearColor[] = { 1,1,1,1 };
 
 	// ビューポートの設定
 	_viewPort.TopLeftX = 0;
 	_viewPort.TopLeftY = 0;
-	_viewPort.Width = static_cast<float>(Application::Instance().GetWindowSize().width);
-	_viewPort.Height = static_cast<float>(Application::Instance().GetWindowSize().height);
+	_viewPort.Width = static_cast<float>(Application::Instance().GetWindowSize().width*2);
+	_viewPort.Height = static_cast<float>(Application::Instance().GetWindowSize().height*2);
 	_viewPort.MaxDepth = 1.0f;
 	_viewPort.MinDepth = 0.0f;
 
 	// シザーの設定
 	_scissor.left = 0;
 	_scissor.top = 0;
-	_scissor.right = Application::Instance().GetWindowSize().width;
-	_scissor.bottom = Application::Instance().GetWindowSize().height;
+	_scissor.right = Application::Instance().GetWindowSize().width*2;
+	_scissor.bottom = Application::Instance().GetWindowSize().height*2;
 
 	// パイプラインのセット
 	list->SetPipelineState(_shadowMapGPS);
@@ -553,7 +556,7 @@ void PMXmodel::PreDrawShadow(ID3D12GraphicsCommandList * list, ID3D12DescriptorH
 
 	for (auto& m : _materials) {
 		// 描画部
-		list->DrawIndexedInstanced(m.faceVerCnt, 1, offset, 0, 0);
+		list->DrawIndexedInstanced(m.faceVerCnt, instanceNum, offset, 0, 0);
 
 		// 変数の加算
 		offset += m.faceVerCnt;
@@ -974,6 +977,67 @@ void PMXmodel::CreateBoneTree()
 	}
 }
 
+void PMXmodel::SolveIK()
+{
+	for (auto& b:_bones)
+	{
+		auto childrenNodesCount = b.ikdata.linkNum;
+		switch (childrenNodesCount)
+		{
+		case 0:
+			continue;
+		case 1:
+			SolveLookAt(b);
+			break;
+		case 2:
+			SolveCosineIK(b);
+			break;
+		default:
+			SolveCCDIK(b);
+		}
+	}
+}
+
+void PMXmodel::SolveCCDIK(BoneInfo& ik)
+{
+}
+
+void PMXmodel::SolveCosineIK(BoneInfo& ik)
+{
+}
+
+void PMXmodel::SolveLookAt(BoneInfo& ik)
+{
+	auto rootNode = _boneTree[ik.name];
+}
+
+XMMATRIX PMXmodel::LookAtMatrix(const XMVECTOR & lookat, XMFLOAT3 & up, XMFLOAT3 & right)
+{
+	XMVECTOR vz = lookat;
+	XMVECTOR vy = XMVector3Normalize(XMLoadFloat3(&up));
+	XMVECTOR vx = XMVector3Normalize(XMVector3Cross(vy, vz));
+	vy = XMVector3Normalize(XMVector3Cross(vz, vx));
+
+	if (abs(XMVector3Dot(vy, vz).m128_f32[0]) == 1.0f) {
+
+		vx = XMVector3Normalize(XMLoadFloat3(&right));
+
+		vy = XMVector3Normalize(XMVector3Cross(vz, vx));
+
+		vx = XMVector3Normalize(XMVector3Cross(vy, vz));
+	}
+	XMMATRIX mat = XMMatrixIdentity();
+	mat.r[0] = vx;
+	mat.r[1] = vy;
+	mat.r[2] = vz;
+	return mat;
+}
+
+XMMATRIX PMXmodel::LookAtMatrix(const XMVECTOR & origin, const XMVECTOR & lookat, XMFLOAT3 & up, XMFLOAT3 & right)
+{
+	return XMMatrixTranspose(LookAtMatrix(origin, up, right))*LookAtMatrix(lookat, up, right);
+}
+
 // PMXモデル描画用パイプラインステートの生成
 HRESULT PMXmodel::CreatePipeline()
 {
@@ -1020,7 +1084,7 @@ HRESULT PMXmodel::CreatePipeline()
 
 	//レンダーターゲットブレンド設定用構造体
 	D3D12_RENDER_TARGET_BLEND_DESC renderBlend = {};
-	renderBlend.BlendEnable = true;
+	renderBlend.BlendEnable = false;
 	renderBlend.SrcBlend = D3D12_BLEND_SRC_ALPHA;
 	renderBlend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 	renderBlend.BlendOp = D3D12_BLEND_OP_ADD;
@@ -1030,8 +1094,8 @@ HRESULT PMXmodel::CreatePipeline()
 	renderBlend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
 	//ブレンドステート設定用構造体
-	D3D12_BLEND_DESC blend = {};
-	blend.AlphaToCoverageEnable = false;
+	D3D12_BLEND_DESC blend;
+	blend.AlphaToCoverageEnable = true;
 	blend.IndependentBlendEnable = false;
 	blend.RenderTarget[0] = renderBlend;
 
@@ -1325,7 +1389,7 @@ void PMXmodel::UpDate(char key[256])
 	BufferUpDate();
 }
 
-void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, ID3D12DescriptorHeap*shadow)
+void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, ID3D12DescriptorHeap*shadow, unsigned int instanceNum)
 {
 	float clearColor[] = { 0.5f,0.5f,0.5f,0.0f };
 
@@ -1401,7 +1465,7 @@ void PMXmodel::Draw(ID3D12GraphicsCommandList* list, ID3D12DescriptorHeap* wvp, 
 		list->SetGraphicsRootDescriptorTable(1, mathandle);
 
 		// 描画部
-		list->DrawIndexedInstanced(m.faceVerCnt, 1, offset, 0, 0);
+		list->DrawIndexedInstanced(m.faceVerCnt, instanceNum, offset, 0, 0);
 
 		// ポインタの加算
 		mathandle.ptr += incsize * 5;// 5枚あるから5倍
@@ -1439,7 +1503,7 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMXmodel::GetInputLayout()
 				
 		{"EDGESIZE",0,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 		
-		{"INSTID",0,DXGI_FORMAT_R32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		{"INSTID",0,DXGI_FORMAT_R32_UINT,0,D3D12_APPEND_ALIGNED_ELEMENT,	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
 	};
 	return inputLayoutDescs;
 }

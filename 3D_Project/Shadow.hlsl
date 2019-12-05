@@ -7,9 +7,9 @@ cbuffer mat : register(b0)
     matrix world;
     matrix view;
     matrix projection;
-    matrix shadow;
     matrix wvp;
     matrix lvp;
+    float3 lightPos;
 };
 
 ///É{Å[ÉìçsóÒ
@@ -80,6 +80,8 @@ Out shadowVS(
         boneMats[boneno.y] * (1.0f - float(weight.x));
     }
 
+    m._m03 += 10 * (instNo % 5);
+    m._m23 += 10 * (instNo / 5);
     float4 movepos = mul(m, float4(pos, 1));
     //movepos = mul(shadow, movepos);
     o.pos = mul(world, movepos);

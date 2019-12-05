@@ -2,8 +2,15 @@
 #include "Dx12Wrapper.h"
 #include <vector>
 
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_dx12.h"
+#include "imgui/imgui_impl_win32.h"
+#include "imgui/imgui_internal.h"
+
 constexpr int WINDOW_WIDTH = 1366;
 constexpr int WINDOW_HEIGHT = 768;
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 LRESULT WindowProcedure(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {
@@ -12,6 +19,7 @@ LRESULT WindowProcedure(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 		PostQuitMessage(0);
 		return 0;
 	}
+	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam);
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 

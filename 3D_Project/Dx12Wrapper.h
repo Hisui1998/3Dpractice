@@ -22,9 +22,9 @@ struct WVPMatrix {
 	DirectX::XMMATRIX world;
 	DirectX::XMMATRIX view;
 	DirectX::XMMATRIX projection;
-	DirectX::XMMATRIX shadow;
 	DirectX::XMMATRIX wvp;
 	DirectX::XMMATRIX lvp;
+	DirectX::XMFLOAT3 lightPos;
 };
 
 // 頂点情報
@@ -74,6 +74,8 @@ private:
 	LPDIRECTINPUT8       _directInput;// DirectInput本体
 	LPDIRECTINPUTDEVICE8 _keyBoadDev;// キーボードデバイス
 
+	ID3D12DescriptorHeap* _imguiDescHeap;// imgui用のdeスクリプタヒープ
+
 	// コマンド系
 	ID3D12CommandAllocator* _cmdAlloc = nullptr;// コマンドアロケータ
 	ID3D12GraphicsCommandList* _cmdList = nullptr;// コマンドリスト
@@ -108,25 +110,27 @@ private:
 	WVPMatrix* _wvpMP;
 	WVPMatrix _wvp;
 	float angle;// 角度
+	float lightangle = 0;// 角度
 	DirectX::XMFLOAT3 eye;// 視点の座標
 	DirectX::XMFLOAT3 target;// どこを見ているかの座標
+	DirectX::XMFLOAT3 lightTag;// どこを見ているかの座標
 	DirectX::XMFLOAT3 up;// 軸
 	DirectX::XMFLOAT3 lightVec;// ライトの平行光線の方向
 	DirectX::XMMATRIX lightproj;
-	DirectX::XMFLOAT3 lightpos;
+	int instanceNum = 1;
 
 	std::shared_ptr<PMDmodel> pmdModel;
 	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
 	std::shared_ptr<Plane> _plane;
 
-
+	// エフェクシア関係の関数
 	void SetEfkRenderer();
-	EffekseerRenderer::Renderer* _efkRenderer = nullptr;
-	Effekseer::Manager* _efkManager = nullptr;
-	EffekseerRenderer::SingleFrameMemoryPool* _efkMemoryPool;
-	EffekseerRenderer::CommandList* _efkCmdList;
-	Effekseer::Effect* _effect;
 	Effekseer::Handle _efkHandle;
+	Effekseer::Effect* _effect = nullptr;
+	Effekseer::Manager* _efkManager = nullptr;
+	EffekseerRenderer::Renderer* _efkRenderer = nullptr;
+	EffekseerRenderer::SingleFrameMemoryPool* _efkMemoryPool = nullptr;
+	EffekseerRenderer::CommandList* _efkCmdList = nullptr;
 
 	/*板ポリ用関数(あとでクラスに分ける予定)*/
 	// 板ポリゴン用の頂点バッファの作成
@@ -155,13 +159,13 @@ private:
 	void DrawSecondPolygon();
 
 	// ペラポリ用変数
-	ID3D12Resource* _peraBuffer = nullptr;// ペラポリ本体のバッファ
+	std::vector<ID3D12Resource*> _peraBuffers;// ペラポリ本体のバッファ
 
 	ID3D12Resource* _peraBuffer2 = nullptr;// ペラポリ2本体のバッファ
 
 	ID3D12Resource* _peraVertBuff = nullptr;// ペラポリ用頂点バッファ
 	D3D12_VERTEX_BUFFER_VIEW _peravbView = {};// ペラポリ用頂点バッファビュー
-
+	
 	ID3D12DescriptorHeap* _rtvDescHeap = nullptr;// ペラポリ用レンダーターゲットデスクリプタヒープ	
 	ID3D12DescriptorHeap* _srvDescHeap = nullptr;// ペラポリ用シェーダーリソースデスクリプタヒープ
 

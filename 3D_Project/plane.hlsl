@@ -10,9 +10,9 @@ cbuffer mat : register(b0)
     matrix world;
     matrix view;
     matrix projection;
-    matrix shadow;
     matrix wvp;
     matrix lvp;
+    float3 lightPos;
 };
 
 struct Out
@@ -37,10 +37,15 @@ Out PlaneVS(
 //ピクセルシェーダ
 float4 PlanePS(Out o) : SV_Target
 {
-    float4 color = float4(1, 0.9, 1, 1);// 床の色
+    float4 color = float4(1, 1, 1, 1);// 床の色
+    
+    if (((int) (o.uv.x * 100) % 2)&&((int) (o.uv.y * 100) % 2))
+    {
+        color *= 0.6f;
+    }
     
     // シャドウマップ用UVの作成
-    float2 shadowMapUV = mul(lvp,o.pos).xy;
+        float2 shadowMapUV = mul(lvp, o.pos).xy;
     shadowMapUV = (shadowMapUV + float2(1, -1)) * float2(0.5, -0.5);
 
     // 深度値の取得

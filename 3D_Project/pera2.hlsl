@@ -28,15 +28,21 @@ float4 pera2PS(Out o) : SV_Target
 {
     return tex.Sample(smp,o.uv);
     
+    float4 texCol = tex.Sample(smp, o.uv);
     float w, h, level;
     tex.GetDimensions(0, w, h, level);
     float dx = 1 / w;
     float dy = 1 / h;
-    float4 ret = tex.Sample(smp, o.uv);
-    float mag = 3;
+    float mag = 1;
     
-    return float4(
-    tex.Sample(smp, o.uv + float2(-dx * mag, 0)).r,
-    tex.Sample(smp, o.uv + float2(dx * mag, 0)).g,
-    tex.Sample(smp, o.uv + float2(0, dy * mag)).ba);
+    float4 rtnCol = tex.Sample(smp, o.uv);
+    rtnCol = rtnCol * 4 -
+    tex.Sample(smp, o.uv + float2(dx * mag, 0)) -
+    tex.Sample(smp, o.uv + float2(-dx * mag, 0))-
+    tex.Sample(smp, o.uv + float2(0, dy * mag)) -
+    tex.Sample(smp, o.uv + float2(0, -dy * mag));
+    
+    rtnCol = pow(rtnCol, 4);
+    
+    return rtnCol;
 }
