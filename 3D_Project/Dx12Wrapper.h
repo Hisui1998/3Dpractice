@@ -105,11 +105,20 @@ private:
 	D3D12_RECT _scissor;// シザー範囲
 
 	// WVP用
+	struct Axis
+	{
+		DirectX::XMFLOAT3 x;
+		DirectX::XMFLOAT3 y;
+		DirectX::XMFLOAT3 z;
+		Axis() :x(), y(), z() {};
+		Axis(DirectX::XMFLOAT3 inx, DirectX::XMFLOAT3 iny, DirectX::XMFLOAT3 inz) :x(inx), y(iny), z(inz) {};
+	};
+
 	ID3D12Resource* _wvpBuff = nullptr;// WVP用の定数バッファ
 	ID3D12DescriptorHeap* _wvpDescHeap;// WVP用の定数バッファデスクリプタヒープ
 	WVPMatrix* _wvpMP;
 	WVPMatrix _wvp;
-	float angle;// 角度
+	DirectX::XMFLOAT4 angle;// 角度
 	float lightangle = 0;// 角度
 	DirectX::XMFLOAT3 eye;// 視点の座標
 	DirectX::XMFLOAT3 target;// どこを見ているかの座標
@@ -121,6 +130,7 @@ private:
 
 	std::shared_ptr<PMDmodel> pmdModel;
 	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
+	std::string name;
 	std::shared_ptr<Plane> _plane;
 
 	// エフェクシア関係の関数

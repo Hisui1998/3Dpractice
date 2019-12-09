@@ -25,7 +25,6 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 
 	// ヘッダー情報の読み込み
 	fread(&header, sizeof(PMXHeader), 1, fp);
-
 	int idx[4];
 	for (int i = 0; i < 4; ++i)
 	{
@@ -37,9 +36,12 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 		{
 			wchar_t c;
 			fread(&c, sizeof(wchar_t), 1, fp);
-			str.push_back(c);
+			if (c!=L'\0')
+			{
+				str[num] = c;
+			}
 		}
-		std::cout << str.c_str() << std::endl;
+		std::wcout << str.c_str() << std::endl;
 	}
 	
 	int vertexNum=0;
@@ -232,14 +234,16 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 
 			// IKリンク
 			fread(&_bones[idx].ikdata.linkNum, sizeof(_bones[idx].ikdata.linkNum), 1, fp);
-			for (int num = 0;num< _bones[idx].ikdata.linkNum;++num)
+			_bones[idx].ikdata.ikLinks.resize(_bones[idx].ikdata.linkNum);
+			auto& links = _bones[idx].ikdata.ikLinks;
+			for (auto& l: links)
 			{
-				fread(&_bones[idx].ikdata.linkboneIdx, header.data[5], 1, fp);
-				fread(&_bones[idx].ikdata.isRadlim, sizeof(_bones[idx].ikdata.isRadlim), 1, fp);
-				if (_bones[idx].ikdata.isRadlim)
+				fread(&l.linkboneIdx, header.data[5], 1, fp);
+				fread(&l.isRadlim, sizeof(l.isRadlim), 1, fp);
+				if (l.isRadlim)
 				{
-					fread(&_bones[idx].ikdata.minRadlim, sizeof(_bones[idx].ikdata.minRadlim), 1, fp);
-					fread(&_bones[idx].ikdata.maxRadlim, sizeof(_bones[idx].ikdata.maxRadlim), 1, fp);
+					fread(&l.minRadlim, sizeof(l.minRadlim), 1, fp);
+					fread(&l.maxRadlim, sizeof(l.maxRadlim), 1, fp);
 				}
 			}
 		}
@@ -322,7 +326,7 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	if (vmdPath != "")
 	{
 		// Vmd読み込み
-		_vmdData = std::make_shared<VMDMotion>(vmdPath,60);
+		_vmdData = std::make_shared<VMDMotion>(vmdPath,0);
 		_morphWeight = 0;
 	}
 	else
@@ -406,7 +410,8 @@ void PMXmodel::MotionUpDate(int frameno)
 
 		// イテレータを反転させて次の要素をとってくる
 		auto nextIt = frameIt.base();
-
+		// IK処理
+		SolveIK(_bones[_boneTree[GetWstringFromString(boneName)].boneIdx]);
 		if (nextIt == keyframes.end()) {
 			// 回転
 			RotationMatrix(GetWstringFromString(boneName), frameIt->Quaternion);
@@ -977,24 +982,12 @@ void PMXmodel::CreateBoneTree()
 	}
 }
 
-void PMXmodel::SolveIK()
+void PMXmodel::SolveIK(BoneInfo&b)
 {
-	for (auto& b:_bones)
+	auto childrenNodesCount = b.ikdata.linkNum;
+	if (childrenNodesCount ==1)
 	{
-		auto childrenNodesCount = b.ikdata.linkNum;
-		switch (childrenNodesCount)
-		{
-		case 0:
-			continue;
-		case 1:
-			SolveLookAt(b);
-			break;
-		case 2:
-			SolveCosineIK(b);
-			break;
-		default:
-			SolveCCDIK(b);
-		}
+		SolveLookAt(b);
 	}
 }
 
@@ -1008,7 +1001,23 @@ void PMXmodel::SolveCosineIK(BoneInfo& ik)
 
 void PMXmodel::SolveLookAt(BoneInfo& ik)
 {
-	auto rootNode = _boneTree[ik.name];
+	// ノードの取得
+	auto rootNode = _boneTree[_bones[ik.ikdata.ikLinks[0].linkboneIdx].name];// ルートボーンノード
+	auto targetNode = _boneTree[_bones[ik.ikdata.boneIdx].name];// ターゲットボーンノード
+	// スタート位置
+	auto rootpos1 = XMLoadFloat3(&rootNode.startPos);
+	auto targetpos1 = XMLoadFloat3(&targetNode.startPos);
+	// 行列変換
+	auto rootpos2 = XMVector3TransformCoord(rootpos1, _boneMats[ik.ikdata.ikLinks[0].linkboneIdx]);
+	auto targetpos2 = XMVector3TransformCoord(targetpos1, _boneMats[ik.ikdata.boneIdx]);
+	// ベクトルの算出
+	auto rootVec = XMVectorSubtract(targetpos1, rootpos1);
+	auto targetVec = XMVectorSubtract(targetpos2, rootpos2);
+	// 正規化
+	rootVec = XMVector3Normalize(rootVec);
+	targetVec = XMVector3Normalize(targetVec);
+	// 移動
+	_boneMats[ik.ikdata.ikLinks[0].linkboneIdx] = LookAtMatrix(rootVec, targetVec, XMFLOAT3(0, 1, 0), XMFLOAT3(1, 0, 0));
 }
 
 XMMATRIX PMXmodel::LookAtMatrix(const XMVECTOR & lookat, XMFLOAT3 & up, XMFLOAT3 & right)
@@ -1033,7 +1042,7 @@ XMMATRIX PMXmodel::LookAtMatrix(const XMVECTOR & lookat, XMFLOAT3 & up, XMFLOAT3
 	return mat;
 }
 
-XMMATRIX PMXmodel::LookAtMatrix(const XMVECTOR & origin, const XMVECTOR & lookat, XMFLOAT3 & up, XMFLOAT3 & right)
+XMMATRIX PMXmodel::LookAtMatrix(const XMVECTOR  origin, const XMVECTOR  lookat, XMFLOAT3 up, XMFLOAT3 right)
 {
 	return XMMatrixTranspose(LookAtMatrix(origin, up, right))*LookAtMatrix(lookat, up, right);
 }
@@ -1067,8 +1076,9 @@ HRESULT PMXmodel::CreatePipeline()
 	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader);
 
 	//レンダーターゲット
-	gpsDesc.NumRenderTargets = 1;
+	gpsDesc.NumRenderTargets = 2;
 	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	gpsDesc.RTVFormats[1] = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 	//深度ステンシル
 	gpsDesc.DepthStencilState.DepthEnable = true;
@@ -1261,7 +1271,11 @@ void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1
 	auto start = XMLoadFloat3(&bonenode.startPos);// 元の座標を入れておく
 	auto quaternion = XMLoadFloat4(&quat1);
 	auto quaternion2 = XMLoadFloat4(&quat2);
-
+	auto bonetype = _bones[bonenode.boneIdx].bitFlag;
+	if (bonetype & 0x0020)
+	{
+		return;
+	}
 
 	//原点まで並行移動してそこで回転を行い、元の位置まで戻す
 	_boneMats[bonenode.boneIdx] =
@@ -1275,8 +1289,11 @@ void PMXmodel::RotationMatrix(const std::wstring bonename, const XMFLOAT4 &quat1
 	auto bonenode = _boneTree[bonename];
 	auto start = XMLoadFloat3(&bonenode.startPos);// 元の座標を入れておく
 	auto quaternion = XMLoadFloat4(&quat1);
-	auto bonetype = _bones[bonenode.boneIdx];
-
+	auto bonetype = _bones[bonenode.boneIdx].bitFlag;
+	if (bonetype & 0x0020)
+	{
+		return;
+	}
 
 	//原点まで並行移動してそこで回転を行い、元の位置まで戻す
 	_boneMats[bonenode.boneIdx] =

@@ -172,7 +172,7 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 
 	auto plane = XMFLOAT4(0, 1, 0, 0);//平面の方程式
 	_wvp.lightPos = XMFLOAT3(-100, 200, -100);// ライトの座標
-	angle = 0.f;
+	angle = {};
 
 	lightTag = target;
 	// ライトから注視点への行列の計算
@@ -186,7 +186,7 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 	lightproj = XMMatrixOrthographicLH(100, 100, 1.f,1500.f);
 
 	// ワールド行列の計算
-	_wvp.world = DirectX::XMMatrixRotationY(angle);
+	_wvp.world = DirectX::XMMatrixRotationY(angle.y);
 
 	// ライトから地面への射影行列（嘘影）の計算
 	//_wvp.shadow = XMMatrixShadow(XMLoadFloat4(&plane), XMLoadFloat3(&_wvp.lightPos));
@@ -679,9 +679,8 @@ HRESULT Dx12Wrapper::CreateFirstPopelineState()
 	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(peraPixShader);
 
 	//レンダーターゲット
-	gpsDesc.NumRenderTargets = 2;
+	gpsDesc.NumRenderTargets = 1;
 	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-	gpsDesc.RTVFormats[1] = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 	//深度ステンシル
 	gpsDesc.DepthStencilState.DepthEnable = false;
@@ -947,9 +946,10 @@ void Dx12Wrapper::DrawSecondPolygon()
 	ImGui::SetNextWindowSize(ImVec2(500,500));
 	ImGui::Begin("gui");
 	ImGui::Bullet();
-	ImGui::SliderAngle("light", &lightangle,-180,180,"%03f");
-	ImGui::SliderInt("instanceNum", &instanceNum,1,25,"%d");
-	ImGui::ColorPicker3("Color", col);
+	ImGui::SliderAngle("light", &lightangle,-180,180,"%.02f");
+	ImGui::Bullet();
+	ImGui::SliderInt("instanceNum", &instanceNum,1,25);
+	ImGui::Text(name.c_str());
 	ImGui::End();
 	// 二つ以上出すときはここでもう一度BeginしてEndする
 	ImGui::Render();
@@ -1052,11 +1052,27 @@ void Dx12Wrapper::KeyUpDate()
 
 	if (key[DIK_Q] || key[DIK_LEFT])
 	{
-		angle += addsize / 10;
+		angle.y += addsize / 10;
 	}
 	else if (key[DIK_E] || key[DIK_RIGHT])
 	{
-		angle -= addsize / 10;
+		angle.y -= addsize / 10;
+	}
+	if (key[DIK_Z])
+	{
+		angle.x += addsize / 10;
+	}
+	else if (key[DIK_X])
+	{
+		angle.x -= addsize / 10;
+	}
+	if (key[DIK_F])
+	{
+		angle.z += addsize / 10;
+	}
+	else if (key[DIK_G])
+	{
+		angle.z -= addsize / 10;
 	}
 
 
@@ -1087,7 +1103,7 @@ void Dx12Wrapper::KeyUpDate()
 		eye = XMFLOAT3(0, 10, -25);
 		target = XMFLOAT3(0, 10, 0);
 		up = XMFLOAT3(0, 1, 0);
-		angle = 0;
+		angle = {};
 	}
 	if (key[DIK_P])
 	{
@@ -1120,12 +1136,21 @@ void Dx12Wrapper::KeyUpDate()
 	});
 
 	// 現在のカメラビュー行列を保存
+
 	_wvp.view = DirectX::XMMatrixLookAtLH(
 		DirectX::XMLoadFloat3(&eye),
 		DirectX::XMLoadFloat3(&target),
 		DirectX::XMLoadFloat3(&up));
 
-	_wvp.view = DirectX::XMMatrixRotationY(angle)*_wvp.view;// カメラの回転
+	Axis axis(XMFLOAT3(1, 0, 0), XMFLOAT3(0, 1, 0), XMFLOAT3(0, 0, 1));
+	_wvp.view *= XMMatrixRotationQuaternion(XMQuaternionRotationAxis(XMLoadFloat3(&axis.x),angle.x))*
+				 XMMatrixRotationQuaternion(XMQuaternionRotationAxis(XMLoadFloat3(&axis.y),angle.y))*
+				 XMMatrixRotationQuaternion(XMQuaternionRotationAxis(XMLoadFloat3(&axis.z),angle.z));
+
+	//_wvp.view = XMMatrixRotationY(angle.y) *_wvp.view;// カメラの回転
+	//_wvp.view = XMMatrixRotationX(angle.x) *_wvp.view;// カメラの回転
+	//_wvp.view = XMMatrixRotationZ(angle.z) *_wvp.view;// カメラの回転
+
 
 	_wvp.wvp = _wvp.world * _wvp.view *_wvp.projection;
 
@@ -1290,8 +1315,8 @@ int Dx12Wrapper::Init()
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
-	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/足首テスト.vmd"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));

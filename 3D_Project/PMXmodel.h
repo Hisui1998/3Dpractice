@@ -25,19 +25,26 @@ struct PMXVertexInfo {
 	float edge;
 };
 
-// IK情報
-struct IKdata {
-	int boneIdx;// 
-	int loopCnt;// IKループ回数
-	float limrad;// IKループ計算時の制限角度
-	int linkNum;// 後続の要素数
-
+// IKリンク情報
+struct IKLink
+{
 	int linkboneIdx;// リンク先のボーンインデックス
 	char isRadlim;// 角度制限を付けるかどうか
 
 	XMFLOAT3 minRadlim;// 角度制限下限
 	XMFLOAT3 maxRadlim;// 角度制限上限
 };
+
+// IK情報
+struct IKdata {
+	int boneIdx;// ターゲットボーンのインデックス
+	int loopCnt;// IKループ回数
+	float limrad;// IKループ計算時の制限角度
+	int linkNum;// 後続の要素数
+
+	std::vector<IKLink> ikLinks;// 後続の要素配列
+};
+
 
 // 戦犯
 #pragma pack(1)
@@ -119,7 +126,7 @@ struct PMXMaterial {
 
 // ボーン情報
 struct BoneInfo {
-	std::wstring name;
+	std::wstring name;// ボーン名
 	XMFLOAT3 pos;// 絶対座標
 	int parentboneIndex;// 親のボーンIndex
 
@@ -176,7 +183,7 @@ private:
 
 	void CreateBoneTree();
 
-	void SolveIK();
+	void SolveIK(BoneInfo&b);
 
 	void SolveCCDIK(BoneInfo& ik);
 
@@ -188,7 +195,7 @@ private:
 	XMMATRIX LookAtMatrix(const XMVECTOR& lookat, XMFLOAT3& up, XMFLOAT3& right);
 
 	// 任意の軸を任意の方向へ向かせる
-	XMMATRIX LookAtMatrix(const XMVECTOR& origin, const XMVECTOR& lookat, XMFLOAT3& up, XMFLOAT3& right);
+	XMMATRIX LookAtMatrix(const XMVECTOR origin, const XMVECTOR lookat, XMFLOAT3 up, XMFLOAT3 right);
 	
 	// パイプラインの生成
 	HRESULT CreatePipeline();
@@ -287,7 +294,6 @@ private:
 	std::map<std::wstring, PMXBoneNode> _boneTree;//ボーン名から子のノードを取得できる
 	std::vector<XMMATRIX>_boneMats;// ボーン行列(中身はボーンインデックス順)
 	XMMATRIX* _sendBone = nullptr;// ボーン行列の転送用ポインタ
-	std::vector<PMXBoneNode*> _boneNodeAddressArray;//indexからノード検索する
 
 	//std::map<IKdata>
 
@@ -297,6 +303,7 @@ private:
 
 	float _morphWeight;// もーふのウェイト(テスト用)
 	int frame = 0;
+	std::string modelname[4];
 public:
 	PMXmodel(ID3D12Device* dev, const std::string modelPath,const std::string vmdPath = "");
 	~PMXmodel();
@@ -314,6 +321,7 @@ public:
 	const std::vector<D3D12_INPUT_ELEMENT_DESC> GetInputLayout();
 	const XMFLOAT3 GetPos();
 
+	const std::string GetModelName() { return modelname[0]; };
 	D3D12_VERTEX_BUFFER_VIEW GetVertexView() { return _vbView; };
 	D3D12_INDEX_BUFFER_VIEW GetIndexView() { return _idxView; };
 	const LPCWSTR GetUseShader();

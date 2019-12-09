@@ -109,16 +109,14 @@ Out vs(
         boneMats[boneno.y] * (1.0f - float(weight.x));
     }
     
-    m._m03 += 10 * (instNo % 5);
-    m._m23 += 10 * (instNo / 5);
+    m._m03 += 10 * (instNo / 5) + 5 * ((instNo % 5) % 2);//x
+    m._m23 += 10 * (instNo % 5) + 5 * ((instNo / 5) % 2);//z
     
     float4 movepos = mul(m, float4(pos, 1));
     
     o.pos = mul(world,movepos);    
     
     o.svpos = mul(wvp, movepos);
-    
-    //o.svpos.x += 10 * instNo;
     
     o.uv = uv;
     
