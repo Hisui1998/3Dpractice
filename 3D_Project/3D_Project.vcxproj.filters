@@ -112,5 +112,7 @@
     <FxCompile Include="pera2.hlsl" />
     <FxCompile Include="Shadow.hlsl" />
     <FxCompile Include="plane.hlsl" />
+    <FxCompile Include="FXAA.hlsl" />
+    <FxCompile Include="Shrink.hlsl" />
   </ItemGroup>
 </Project>

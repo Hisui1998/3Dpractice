@@ -37,7 +37,7 @@ Out PlaneVS(
 //ピクセルシェーダ
 float4 PlanePS(Out o) : SV_Target
 {
-    float4 color = float4(1, 1, 1, 1);// 床の色
+    float4 color = float4(0.25, 0.25, 1, 1);// 床の色
     
     if (((int) (o.uv.x * 100) % 2)&&((int) (o.uv.y * 100) % 2))
     {

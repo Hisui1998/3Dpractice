@@ -15,9 +15,13 @@
 #pragma comment(lib,"DirectXTex.lib")
 
 std::map<std::string, ID3D12Resource*> PMXmodel::_texMap;
+int PMXmodel::ModelNum = 0;
 
 void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 {
+	ModelNum++;
+	std::cout << ModelNum<< "体目のモデルを読み込みます。" << std::endl;
+	
 	FILE*fp;
 	std::string ModelPath = modelPath;
 	FolderPath = ModelPath.substr(0, ModelPath.rfind('/')+1);
@@ -29,8 +33,8 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	for (int i = 0; i < 4; ++i)
 	{
 		fread(&idx[i], sizeof(int), 1, fp);
-
-		std::string str;
+		setlocale(LC_ALL, "Japanese");
+		std::wstring str;
 		str.resize(idx[i] / 2);
 		for (int num = 0; num < idx[i] / 2; ++num)
 		{
@@ -41,7 +45,7 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 				str[num] = c;
 			}
 		}
-		std::wcout << str.c_str() << std::endl;
+		std::wcout << str << std::endl;
 	}
 	
 	int vertexNum=0;
@@ -231,7 +235,6 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 			fread(&_bones[idx].ikdata.boneIdx, header.data[5], 1, fp);
 			fread(&_bones[idx].ikdata.loopCnt, sizeof(_bones[idx].ikdata.loopCnt), 1, fp);
 			fread(&_bones[idx].ikdata.limrad, sizeof(_bones[idx].ikdata.limrad), 1, fp);
-
 			// IKリンク
 			fread(&_bones[idx].ikdata.linkNum, sizeof(_bones[idx].ikdata.linkNum), 1, fp);
 			_bones[idx].ikdata.ikLinks.resize(_bones[idx].ikdata.linkNum);
@@ -246,6 +249,12 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 					fread(&l.maxRadlim, sizeof(l.maxRadlim), 1, fp);
 				}
 			}
+			std::wcout << L"IK ボーン番号=" << idx << L":" << _bones[idx].name << std::endl;
+
+			for (auto& ik : _bones[idx].ikdata.ikLinks) {
+				std::wcout << L"\t ノードボーン=" << ik.linkboneIdx << L":" << _bones[ik.linkboneIdx].name << std::endl;
+			}
+			std::cout << '\n' << std::endl;
 		}
 	}
 
@@ -322,6 +331,8 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	}	
 
 	fclose(fp);
+	std::cout << "読み込み完了。" << std::endl;
+	std::cout << ModelNum << "体目のモデルの初期化を開始します。" << std::endl;
 
 	if (vmdPath != "")
 	{
@@ -378,6 +389,7 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	CreateBoneTree();
 
 	result = CreateBoneBuffer();
+	std::cout << "初期化完了。" << std::endl;
 }
 
 void PMXmodel::BufferUpDate()
@@ -1055,11 +1067,11 @@ HRESULT PMXmodel::CreatePipeline()
 	ID3DBlob* pixelShader = nullptr;
 
 	// 頂点シェーダ
-	auto result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, nullptr, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &vertexShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, nullptr, "ps", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pixelShader, nullptr);
 	auto inputLayout = GetInputLayout();
 
@@ -1076,9 +1088,10 @@ HRESULT PMXmodel::CreatePipeline()
 	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader);
 
 	//レンダーターゲット
-	gpsDesc.NumRenderTargets = 2;
+	gpsDesc.NumRenderTargets = 3;
 	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 	gpsDesc.RTVFormats[1] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	gpsDesc.RTVFormats[2] = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 	//深度ステンシル
 	gpsDesc.DepthStencilState.DepthEnable = true;

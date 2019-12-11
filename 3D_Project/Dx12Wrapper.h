@@ -34,6 +34,12 @@ struct Vertex
 	DirectX::XMFLOAT2 uv;
 };
 
+// ライトの色
+struct LightColor
+{
+	float bloom[4];
+};
+
 class Dx12Wrapper
 {
 private:
@@ -94,6 +100,18 @@ private:
 	ID3D12DescriptorHeap* _lightDescHeap;// 深度バッファデスクリプタヒープ
 	ID3D12DescriptorHeap* _lightSrvHeap;// 深度SRVデスクリプタヒープ	
 
+	// 光らせるやーつ
+	ID3D12Resource* _shrinkBuffer = nullptr;// 高輝度バッファ
+	ID3D12DescriptorHeap* _shrinkRtvHeap;// 深度バッファデスクリプタヒープ
+	ID3D12DescriptorHeap* _shrinkSrvHeap;// 深度SRVデスクリプタヒーぷ
+
+	HRESULT CreateShrinkBuffer();// バッファ作成
+	void DrawToShrinkBuffer();// バッファへの書き込み
+	ID3D12PipelineState* _shrinkPipeline = nullptr;// パイプライン
+	HRESULT CreateShrinkPipline();
+
+
+
 	// スワップチェイン用
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ
 	std::vector<ID3D12Resource*>renderTargets;// スワップチェインで使うバッファのRTV	
@@ -132,6 +150,12 @@ private:
 	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
 	std::string name;
 	std::shared_ptr<Plane> _plane;
+
+	HRESULT CreateColBuffer();
+	float bloomCol[4];
+	float **MapCol;
+	ID3D12Resource* _colorBuffer;
+	ID3D12DescriptorHeap* _colDescHeap;
 
 	// エフェクシア関係の関数
 	void SetEfkRenderer();

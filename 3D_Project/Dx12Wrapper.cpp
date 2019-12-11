@@ -21,7 +21,7 @@
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib,"DirectXTex.lib")
 
-const FLOAT clearColor[] = { 0.5f,0.5f,0.5f,0.0f };//クリアカラー設定
+const FLOAT clearColor[] = { 0.01f,0.01f,0.01f,0.0f };//クリアカラー設定
 
 // デバイスの作成
 HRESULT Dx12Wrapper::DeviceInit()
@@ -345,6 +345,217 @@ void Dx12Wrapper::ExecuteCommand()
 	_cmdQue->Signal(_fence, ++_fenceValue);
 }
 
+HRESULT Dx12Wrapper::CreateShrinkBuffer()
+{
+	Size wsize = Application::Instance().GetWindowSize();
+
+	D3D12_RESOURCE_DESC ResDesc = {};
+	ResDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	ResDesc.Width = wsize.width;
+	ResDesc.Height = wsize.height;
+	ResDesc.DepthOrArraySize = 1;
+	ResDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	ResDesc.SampleDesc.Count = 1;
+	ResDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+	D3D12_CLEAR_VALUE clear = { DXGI_FORMAT_R8G8B8A8_UNORM ,{0.1f,0.1f,0.1f,0.0f}, };
+
+	// バッファ作成
+	auto result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&ResDesc,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		&clear,
+		IID_PPV_ARGS(&_shrinkBuffer)
+	);
+
+	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
+	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	descHeapDesc.NodeMask = 0;
+	descHeapDesc.NumDescriptors = 1;
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+
+	// レンダーターゲットデスクリプタヒープの作成
+	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_shrinkRtvHeap));
+
+	descHeapDesc.NumDescriptors = 1;
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;// タイプ変更
+	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+	// シェーダーリソースデスクリプタヒープの作成
+	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_shrinkSrvHeap));
+
+	_dev->CreateRenderTargetView(_shrinkBuffer,nullptr, _shrinkRtvHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// シェーダーリソースビューの作成
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+
+	_dev->CreateShaderResourceView(_shrinkBuffer, &srvDesc, _shrinkSrvHeap->GetCPUDescriptorHandleForHeapStart());
+	return result;
+}
+
+void Dx12Wrapper::DrawToShrinkBuffer()
+{
+	float col[4] = { 0.1f,0.1f,0.1f,0.0 };
+	auto handle = _shrinkRtvHeap->GetCPUDescriptorHandleForHeapStart();
+
+	_cmdAlloc->Reset();
+	_cmdList->Reset(_cmdAlloc, nullptr);
+
+	// レンダーターゲット指定
+	_cmdList->OMSetRenderTargets(1,&handle, false,nullptr);
+	_cmdList->ClearRenderTargetView(handle, col,0,nullptr);// クリア
+
+	// シグネチャとパイプラインの設定
+	_cmdList->SetGraphicsRootSignature(_peraSignature);
+	_cmdList->SetPipelineState(_shrinkPipeline);
+
+	// 頂点バッファとトポロジの設定
+	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	_cmdList->IASetVertexBuffers(0, 1, &_peravbView);
+
+	auto start = _srvDescHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_srvDescHeap);
+	start.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)*2;
+	_cmdList->SetGraphicsRootDescriptorTable(0, start);
+
+	// ビューポートの設定
+	D3D12_VIEWPORT vp = {};
+	vp.TopLeftX = 0;
+	vp.TopLeftY = 0;
+	vp.Width = static_cast<float>(Application::Instance().GetWindowSize().width);
+	vp.Height = static_cast<float>(Application::Instance().GetWindowSize().height)/2;
+	vp.MaxDepth = 1.0f;
+	vp.MinDepth = 0.0f;
+
+	// シザーの設定
+	D3D12_RECT sr = {};
+	sr.left = 0;
+	sr.top = 0;
+	sr.right = vp.Width;
+	sr.bottom = vp.Height;
+
+	for (int i = 0; i < 8; ++i)
+	{
+		_cmdList->RSSetViewports(1,&vp);
+		_cmdList->RSSetScissorRects(1,&sr);
+		_cmdList->DrawInstanced(4, 1, 0, 0);
+
+		vp.TopLeftY += vp.Height;
+		sr.top = vp.TopLeftY;
+		vp.Height /= 2;
+		vp.Width /= 2;
+		sr.bottom = sr.top + vp.Height;
+	}
+
+	_cmdList->Close();
+}
+
+HRESULT Dx12Wrapper::CreateShrinkPipline()
+{
+	auto result = D3DCompileFromFile(L"Shrink.hlsl", nullptr, nullptr, "shrinkVS", "vs_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader, nullptr);
+
+	// ピクセルシェーダ
+	result = D3DCompileFromFile(L"Shrink.hlsl", nullptr, nullptr, "shrinkPS", "ps_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraPixShader, nullptr);
+
+	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
+	{
+		// Pos
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0, D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// UV
+		{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+	};
+
+	// パイプラインを作るためのGPSの変数の作成
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC gpsDesc = {};
+
+	//ルートシグネチャと頂点レイアウト
+	gpsDesc.pRootSignature = _peraSignature;
+	gpsDesc.InputLayout.pInputElementDescs = peraLayoutDescs;
+	gpsDesc.InputLayout.NumElements = _countof(peraLayoutDescs);
+
+	//シェーダのセット
+	gpsDesc.VS = CD3DX12_SHADER_BYTECODE(peraVertShader);
+	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(peraPixShader);
+
+	//レンダーターゲット
+	gpsDesc.NumRenderTargets = 1;
+	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	//深度ステンシル
+	gpsDesc.DepthStencilState.DepthEnable = false;
+	gpsDesc.DepthStencilState.StencilEnable = false;
+
+	//ラスタライザ
+	gpsDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	gpsDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+
+	//その他
+	gpsDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	gpsDesc.NodeMask = 0;
+	gpsDesc.SampleDesc.Count = 1;
+	gpsDesc.SampleDesc.Quality = 0;
+	gpsDesc.SampleMask = 0xffffffff;
+	gpsDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;//三角形
+
+	result = _dev->CreateGraphicsPipelineState(&gpsDesc, IID_PPV_ARGS(&_shrinkPipeline));
+
+	return result;
+}
+
+
+HRESULT Dx12Wrapper::CreateColBuffer()
+{
+	// デスクリプタヒープ作成用の設定
+	D3D12_DESCRIPTOR_HEAP_DESC colDesc = {};
+	colDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	colDesc.NodeMask = 0;
+	colDesc.NumDescriptors = 1;
+	colDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+	auto result = _dev->CreateDescriptorHeap(&colDesc, IID_PPV_ARGS(&_colDescHeap));
+
+	// コンスタン十バッファ用のヒーププロパティ
+	D3D12_HEAP_PROPERTIES cbvHeapProp = {};
+	cbvHeapProp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	cbvHeapProp.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+	cbvHeapProp.CreationNodeMask = 1;
+	cbvHeapProp.VisibleNodeMask = 1;
+	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	auto size = sizeof(bloomCol);
+	size = (size + 0xff)&~0xff;
+
+	// コンスタントバッファの作成
+	result = _dev->CreateCommittedResource(&cbvHeapProp,
+		D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(size),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&_colorBuffer));
+
+	// コンスタントバッファ用のデスク
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+	cbvDesc.BufferLocation = _colorBuffer->GetGPUVirtualAddress();
+	cbvDesc.SizeInBytes = static_cast<unsigned int>(size);
+
+	auto handle = _colDescHeap->GetCPUDescriptorHandleForHeapStart();
+	// コンスタントバッファビューの作成
+	_dev->CreateConstantBufferView(&cbvDesc, handle);
+	
+	// Mapping
+	result = _colorBuffer->Map(0, nullptr, (void**)&MapCol);
+	std::memcpy(MapCol, &bloomCol, sizeof(bloomCol));
+
+	return result;
+}
 
 void Dx12Wrapper::SetEfkRenderer()
 {
@@ -438,18 +649,18 @@ HRESULT Dx12Wrapper::CreatePolygonVertexBuffer()
 // 一枚目ポリゴンの作成
 HRESULT Dx12Wrapper::CreateFirstPolygon()
 {
-	_peraBuffers.resize(2);
+	_peraBuffers.resize(3);
 	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
 	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 	descHeapDesc.NodeMask = 0;
-	descHeapDesc.NumDescriptors = 2;
+	descHeapDesc.NumDescriptors = 3;
 	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 
 	// レンダーターゲットデスクリプタヒープの作成
 	auto result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_rtvDescHeap));
 
 	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	descHeapDesc.NumDescriptors = 2;
+	descHeapDesc.NumDescriptors = 3;
 	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;// タイプ変更
 
 	// シェーダーリソースデスクリプタヒープの作成
@@ -467,7 +678,7 @@ HRESULT Dx12Wrapper::CreateFirstPolygon()
 	desc.SampleDesc.Quality = 0;
 	desc.MipLevels = 1;
 	
-	D3D12_CLEAR_VALUE clear = { DXGI_FORMAT_R8G8B8A8_UNORM ,{0.5f,0.5f,0.5f,0.0f}, };
+	D3D12_CLEAR_VALUE clear = { DXGI_FORMAT_R8G8B8A8_UNORM ,{0.01f,0.01f,0.01f,0.0f}, };
 	auto rtvstart = _rtvDescHeap->GetCPUDescriptorHandleForHeapStart();
 	auto srvstart = _srvDescHeap->GetCPUDescriptorHandleForHeapStart();
 	for (auto& pb: _peraBuffers)
@@ -530,7 +741,7 @@ HRESULT Dx12Wrapper::CreateSecondPolygon()
 	desc.MipLevels = 1;
 
 	// クリアバリュー
-	D3D12_CLEAR_VALUE clear = { DXGI_FORMAT_R8G8B8A8_UNORM ,{0.5f,0.5f,0.5f,0.0f}, };
+	D3D12_CLEAR_VALUE clear = { DXGI_FORMAT_R8G8B8A8_UNORM ,{0.01f,0.01f,0.01f,0.0f}, };
 
 	// リソース作成
 	result = _dev->CreateCommittedResource(
@@ -575,7 +786,7 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	SamplerDesc[0].MaxAnisotropy = 0;// FilterがAnisotropyのときのみ有効
 
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[4] = {};// 一枚ポリゴン
+	D3D12_DESCRIPTOR_RANGE descRange[7] = {};// 一枚ポリゴン
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
@@ -593,14 +804,31 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	descRange[2].BaseShaderRegister = 2;//レジスタ番号
 	descRange[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	// ライトからの深度
+	// housenn
 	descRange[3].NumDescriptors = 1;
 	descRange[3].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[3].BaseShaderRegister = 3;//レジスタ番号
 	descRange[3].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// bloom用
+	descRange[4].NumDescriptors = 1;
+	descRange[4].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
+	descRange[4].BaseShaderRegister = 4;//レジスタ番号
+	descRange[4].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	// shrink用
+	descRange[5].NumDescriptors = 1;
+	descRange[5].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
+	descRange[5].BaseShaderRegister = 5;//レジスタ番号
+	descRange[5].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	
+	descRange[6].NumDescriptors = 1;
+	descRange[6].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;// カラー値
+	descRange[6].BaseShaderRegister = 0;//レジスタ番号
+	descRange[6].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[4] = {};
+	D3D12_ROOT_PARAMETER rootParam[7] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
@@ -618,18 +846,36 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	rootParam[2].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
-	// ライトからの深度
+	// 法線
 	rootParam[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[3].DescriptorTable.pDescriptorRanges = &descRange[3];//対応するレンジへのポインタ
 	rootParam[3].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	// buru-mu
+	rootParam[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[4].DescriptorTable.pDescriptorRanges = &descRange[4];//対応するレンジへのポインタ
+	rootParam[4].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	// シュリンク
+	rootParam[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[5].DescriptorTable.pDescriptorRanges = &descRange[5];//対応するレンジへのポインタ
+	rootParam[5].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	// シュリンク
+	rootParam[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[6].DescriptorTable.pDescriptorRanges = &descRange[6];//対応するレンジへのポインタ
+	rootParam[6].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 4;
+	rsd.NumParameters = 7;
 	rsd.NumStaticSamplers = 1;
 
 	auto result = D3D12SerializeRootSignature(
@@ -651,11 +897,11 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 // 一枚目ポリゴン用のパイプラインの作成
 HRESULT Dx12Wrapper::CreateFirstPopelineState()
 {
-	auto result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, nullptr, "peraVS", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "peraVS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, nullptr, "peraPS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "peraPS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraPixShader, nullptr);
 
 	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
@@ -862,8 +1108,10 @@ void Dx12Wrapper::DrawFirstPolygon()
 	auto srvStart = _srvDescHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetDescriptorHeaps(1,&_srvDescHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(0, srvStart);
-	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	_cmdList->SetGraphicsRootDescriptorTable(3, srvStart);
+
+	auto ssh = _shrinkSrvHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_shrinkSrvHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(5, ssh);
 
 	// カメラ深度のセット
 	auto dstart = _dsvSrvHeap->GetGPUDescriptorHandleForHeapStart();
@@ -875,6 +1123,17 @@ void Dx12Wrapper::DrawFirstPolygon()
 	_cmdList->SetDescriptorHeaps(1, &_lightSrvHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(2, lstart);
 
+	// 色のせっと
+	_cmdList->SetDescriptorHeaps(1, &_colDescHeap);
+	auto colStart = _colDescHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetGraphicsRootDescriptorTable(6, colStart);
+	   
+	_cmdList->SetDescriptorHeaps(1, &_srvDescHeap);
+	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	_cmdList->SetGraphicsRootDescriptorTable(3, srvStart);
+
+	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	_cmdList->SetGraphicsRootDescriptorTable(4, srvStart);
 
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);
@@ -942,18 +1201,19 @@ void Dx12Wrapper::DrawSecondPolygon()
 	_cmdList->DrawInstanced(4, 1, 0, 0);	  
 
 	// GUI
-	float col[3] = {};
-	ImGui::SetNextWindowSize(ImVec2(500,500));
+	float col[4] = {};
+	ImGui::SetNextWindowSize(ImVec2(600,400));
 	ImGui::Begin("gui");
-	ImGui::Bullet();
-	ImGui::SliderAngle("light", &lightangle,-180,180,"%.02f");
-	ImGui::Bullet();
-	ImGui::SliderInt("instanceNum", &instanceNum,1,25);
-	ImGui::Text(name.c_str());
+	ImGui::BulletText("light");
+	ImGui::SliderAngle("ライト角度", &lightangle,-180,180,"%.02f");
+	ImGui::BulletText("instanceNum");
+	ImGui::SliderInt("インスタンス数", &instanceNum,1,25);
+	ImGui::BulletText("blooomColor");
+	ImGui::ColorPicker4("ブルームの色", bloomCol);
+	ImGui::Text(name.c_str());	
 	ImGui::End();
 	// 二つ以上出すときはここでもう一度BeginしてEndする
 	ImGui::Render();
-
 	_cmdList->SetDescriptorHeaps(1, &_imguiDescHeap);
 	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), _cmdList);
 
@@ -1141,15 +1401,15 @@ void Dx12Wrapper::KeyUpDate()
 		DirectX::XMLoadFloat3(&eye),
 		DirectX::XMLoadFloat3(&target),
 		DirectX::XMLoadFloat3(&up));
-
+/*
 	Axis axis(XMFLOAT3(1, 0, 0), XMFLOAT3(0, 1, 0), XMFLOAT3(0, 0, 1));
 	_wvp.view *= XMMatrixRotationQuaternion(XMQuaternionRotationAxis(XMLoadFloat3(&axis.x),angle.x))*
 				 XMMatrixRotationQuaternion(XMQuaternionRotationAxis(XMLoadFloat3(&axis.y),angle.y))*
-				 XMMatrixRotationQuaternion(XMQuaternionRotationAxis(XMLoadFloat3(&axis.z),angle.z));
+				 XMMatrixRotationQuaternion(XMQuaternionRotationAxis(XMLoadFloat3(&axis.z),angle.z));*/
 
-	//_wvp.view = XMMatrixRotationY(angle.y) *_wvp.view;// カメラの回転
-	//_wvp.view = XMMatrixRotationX(angle.x) *_wvp.view;// カメラの回転
-	//_wvp.view = XMMatrixRotationZ(angle.z) *_wvp.view;// カメラの回転
+	_wvp.view = XMMatrixRotationY(angle.y) *_wvp.view;// カメラの回転
+	_wvp.view = XMMatrixRotationX(angle.x) *_wvp.view;// カメラの回転
+	_wvp.view = XMMatrixRotationZ(angle.z) *_wvp.view;// カメラの回転
 
 
 	_wvp.wvp = _wvp.world * _wvp.view *_wvp.projection;
@@ -1164,6 +1424,8 @@ void Dx12Wrapper::KeyUpDate()
 	_wvp.lvp = lightview * lightproj;// ライト座標の更新
 
 	*_wvpMP = _wvp;// 転送用に書き込む
+
+	*MapCol = bloomCol;
 }
 
 // 画面描画関数
@@ -1177,7 +1439,6 @@ void Dx12Wrapper::ScreenUpDate()
 
 	auto peraStart = _rtvDescHeap->GetCPUDescriptorHandleForHeapStart();// 一枚目のポリゴンに描画
 	
-
 	_cmdAlloc->Reset();
 	_cmdList->Reset(_cmdAlloc, nullptr);//コマンドリストリセット
 
@@ -1198,7 +1459,7 @@ void Dx12Wrapper::ScreenUpDate()
 	_cmdList->ClearDepthStencilView(depthStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	// リソースバリア
-	for (int i= 0;i<2;++i)
+	for (int i= 0;i<3;++i)
 	{
 		_cmdList->ResourceBarrier(1,
 			&CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1212,9 +1473,11 @@ void Dx12Wrapper::ScreenUpDate()
 	_cmdList->OMSetRenderTargets(_peraBuffers.size(), &peraStart, true, &depthStart);
 
 	//レンダーターゲットのクリア
-	_cmdList->ClearRenderTargetView(peraStart, clearColor, 0, nullptr);
-	peraStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	_cmdList->ClearRenderTargetView(peraStart, clearColor, 0, nullptr);
+	for (int i = 0; i < 3; ++i)
+	{
+		_cmdList->ClearRenderTargetView(peraStart, clearColor, 0, nullptr);
+		peraStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	}
 
 	// 床のびょうが
 	_plane->Draw(_cmdList, _wvpDescHeap, _lightSrvHeap);
@@ -1236,7 +1499,7 @@ void Dx12Wrapper::ScreenUpDate()
 	EffekseerRendererDX12::EndCommandList(_efkCmdList);
 
 	// リソースバリア
-	for (int i = 0; i < 2; ++i)
+	for (int i = 0; i < 3; ++i)
 	{
 		_cmdList->ResourceBarrier(1,
 			&CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1248,6 +1511,15 @@ void Dx12Wrapper::ScreenUpDate()
 
 	//コマンドのクローズ
 	_cmdList->Close();
+
+	// コマンド追加とフェンス
+	ExecuteCommand();
+
+	// 待ち
+	WaitWithFence();
+
+	// 高輝度
+	DrawToShrinkBuffer();
 
 	// コマンド追加とフェンス
 	ExecuteCommand();
@@ -1315,7 +1587,7 @@ int Dx12Wrapper::Init()
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/足首テスト.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/ヤゴコロダンス.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
@@ -1341,7 +1613,6 @@ int Dx12Wrapper::Init()
 	if (FAILED(CreateWVPConstantBuffer()))
 		return 10;
 
-
 	if (FAILED(CreateFirstPolygon()))
 		return 11;
 
@@ -1362,6 +1633,16 @@ int Dx12Wrapper::Init()
 
 	if (FAILED(CreatePolygonVertexBuffer()))
 		return 17;
+	
+	if (FAILED(CreateShrinkBuffer()))
+		return 18;
+
+	if (FAILED(CreateShrinkPipline()))
+		return 19;
+
+	if (FAILED(CreateColBuffer()))
+		return 20;
+
 
 	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
 	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -1369,10 +1650,10 @@ int Dx12Wrapper::Init()
 	descHeapDesc.NumDescriptors = 1;
 	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
-	auto result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_imguiDescHeap));
+	auto imguiresult = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_imguiDescHeap));
 
 	ImGui::CreateContext();
-	auto imguiresult = ImGui_ImplWin32_Init(_hwnd);
+	imguiresult = ImGui_ImplWin32_Init(_hwnd);
 	assert(imguiresult);
 	imguiresult = ImGui_ImplDX12_Init(_dev, 2,
 		DXGI_FORMAT_R8G8B8A8_UNORM, 

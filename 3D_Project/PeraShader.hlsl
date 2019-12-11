@@ -10,8 +10,53 @@ Texture2D<float4> lightdepth : register(t2);
 //法線
 Texture2D<float4> normal : register(t3);
 
+//ブルーム
+Texture2D<float4> bloom : register(t4);
+
+//明るさ
+Texture2D<float4> shrink : register(t5);
+
 // サンプラ
 SamplerState smp : register(s0);
+
+// 色情報
+cbuffer colors : register(b0)
+{
+    float4 bloomCol;
+};
+
+// ガウシアンぼかしの式
+float4 GaussianFilteredColor5x5(Texture2D<float4> intex,SamplerState smpst,float2 inuv,float dx, float dy)
+{
+    float4 ret = intex.Sample(smpst, inuv);
+    ret += intex.Sample(smp, inuv + float2(-2 * dx, 2 * dy)) * 1;
+    ret += intex.Sample(smp, inuv + float2(-1 * dx, 2 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(0 * dx, 2 * dy)) * 6;
+    ret += intex.Sample(smp, inuv + float2(1 * dx, 2 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(2 * dx, 2 * dy)) * 1;
+    ret += intex.Sample(smp, inuv + float2(-2 * dx, 1 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(-1 * dx, 1 * dy)) * 16;
+    ret += intex.Sample(smp, inuv + float2(0 * dx, 1 * dy)) * 24;
+    ret += intex.Sample(smp, inuv + float2(1 * dx, 1 * dy)) * 16;
+    ret += intex.Sample(smp, inuv + float2(2 * dx, 1 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(-2 * dx, 0 * dy)) * 6;
+    ret += intex.Sample(smp, inuv + float2(-1 * dx, 0 * dy)) * 24;
+    
+    ret += intex.Sample(smp, inuv + float2(1 * dx, 0 * dy)) * 24;
+    ret += intex.Sample(smp, inuv + float2(2 * dx, 0 * dy)) * 6;
+    ret += intex.Sample(smp, inuv + float2(-2 * dx, -1 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(-1 * dx, -1 * dy)) * 16;
+    ret += intex.Sample(smp, inuv + float2(0 * dx, -1 * dy)) * 24;
+    ret += intex.Sample(smp, inuv + float2(1 * dx, -1 * dy)) * 16;
+    ret += intex.Sample(smp, inuv + float2(2 * dx, -1 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(-2 * dx, -2 * dy)) * 1;
+    ret += intex.Sample(smp, inuv + float2(-1 * dx, -2 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(0 * dx, -2 * dy)) * 6;
+    ret += intex.Sample(smp, inuv + float2(1 * dx, -2 * dy)) * 4;
+    ret += intex.Sample(smp, inuv + float2(2 * dx, -2 * dy)) * 1;
+    ret /= 256;
+    return ret;
+}
 
 struct Out
 {
@@ -57,8 +102,11 @@ float4 peraPS(Out o) : SV_TarGet
     depth.Sample(smp, o.uv + float2(0, -dy*4));
     
     ret2 = dot(0.4f, 1 - ret2);
-    ret2 = pow(ret2,4);
+    ret2 = pow(ret2,1);
     //return float4(ret2, ret2, ret2, 1) * texColor;
+    
+   
+    //return ret3 * texColor;
     
     if ((o.uv.x <= 0.2) && (o.uv.y <= 0.2))
     {
@@ -75,10 +123,33 @@ float4 peraPS(Out o) : SV_TarGet
     else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.6))
     {
         float4 dep = normal.Sample(smp, o.uv * 5);
-        //dep = pow(dep, 100);
+        return dep;
+    }
+    else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.8))
+    {
+        float4 dep = bloom.Sample(smp, o.uv * 5);
+        return dep;
+    }
+    else if ((o.uv.x <= 0.2) && (o.uv.y <= 1.0))
+    {
+        float4 dep = shrink.Sample(smp, o.uv * 5);
         return dep;
     }
     
-    return tex.Sample(smp, o.uv);
+    float4 oneBloom = GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy);
+    float4 bloomSum = float4(0, 0, 0, 0);
+    float2 uvSize = float2(1, 0.5);
+    float2 uvOffset = float2(0, 0);
+    for (int i = 0; i < 8; ++i)
+    {
+        bloomSum += GaussianFilteredColor5x5(shrink, smp, o.uv * uvSize + uvOffset, dx, dy);
+        uvOffset.y += uvSize.y;
+        uvSize *= 0.5f;
+    }   
+    //return bloomCol;
+    return texColor + GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy) + saturate(bloomCol*bloomSum);
+    
+    //return float4(aa, texColor.a);
+    //return oneBloom;
     return float4(1, b, b, 1) * texColor;
 }

@@ -183,6 +183,7 @@ private:
 
 	void CreateBoneTree();
 
+	// IK
 	void SolveIK(BoneInfo&b);
 
 	void SolveCCDIK(BoneInfo& ik);
@@ -301,6 +302,7 @@ private:
 
 	std::string FolderPath;// モデルが入っているフォルダまでのパス
 
+	static int ModelNum;
 	float _morphWeight;// もーふのウェイト(テスト用)
 	int frame = 0;
 	std::string modelname[4];

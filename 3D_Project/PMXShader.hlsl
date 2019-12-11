@@ -1,3 +1,8 @@
+#define FXAA_GRAY_AS_LUMA 1
+#define FXAA_PC 1
+#define FXAA_HLSL_5 1
+#include"FXAA.hlsl"
+
 // テクスチャ
 Texture2D<float4> tex : register(t0);
 
@@ -67,6 +72,7 @@ struct PixelOut
 {
     float4 zero : SV_TARGET0;
     float4 one : SV_TARGET1;
+    float4 two : SV_TARGET2;
 };
 
 // 頂点シェーダ
@@ -133,6 +139,31 @@ Out vs(
 	return o;
 }
 
+
+float4 FXAAtoTEX(Texture2D<float4> intex, SamplerState insmp,float2 inuv,float dx,float dy)
+{
+    FxaaTex InputFXAATex = { insmp, intex };
+    float4 fxaaShrink = FxaaPixelShader(
+		inuv, // FxaaFloat2 pos,
+		FxaaFloat4(0.0f, 0.0f, 0.0f, 0.0f), // FxaaFloat4 fxaaConsolePosPos,
+		InputFXAATex, // FxaaTex tex,
+		InputFXAATex, // FxaaTex fxaaConsole360TexExpBiasNegOne,
+		InputFXAATex, // FxaaTex fxaaConsole360TexExpBiasNegTwo,
+		float2(dx, dy), // FxaaFloat2 fxaaQualityRcpFrame,
+		FxaaFloat4(0.0f, 0.0f, 0.0f, 0.0f), // FxaaFloat4 fxaaConsoleRcpFrameOpt,
+		FxaaFloat4(0.0f, 0.0f, 0.0f, 0.0f), // FxaaFloat4 fxaaConsoleRcpFrameOpt2,
+		FxaaFloat4(0.0f, 0.0f, 0.0f, 0.0f), // FxaaFloat4 fxaaConsole360RcpFrameOpt2,
+		0.75f, // FxaaFloat fxaaQualitySubpix,
+		0.166f, // FxaaFloat fxaaQualityEdgeThreshold,
+		0.0833f, // FxaaFloat fxaaQualityEdgeThresholdMin,
+		0.0f, // FxaaFloat fxaaConsoleEdgeSharpness,
+		0.0f, // FxaaFloat fxaaConsoleEdgeThreshold,
+		0.0f, // FxaaFloat fxaaConsoleEdgeThresholdMin,
+		FxaaFloat4(0.0f, 0.0f, 0.0f, 0.0f) // FxaaFloat fxaaConsole360ConstDir,
+	    );
+    return fxaaShrink;
+}
+
 // ピクセルシェーダ
 PixelOut ps(Out o)
 {
@@ -174,10 +205,12 @@ PixelOut ps(Out o)
     }
     po.zero = saturate(texColor * diffuse * toonDif);
     po.one = float4(o.normal, 1);
+        
+    float y = dot(float3(0.3f, 0.6f, 0.1f), texColor.rgb);
+    po.two = y > 0.99f ? texColor : 0.0;
     
     return po;
-    //return saturate(texColor * diffuse * toonDif);
-
+    
     //return saturate(toonDif * diffuse * texColor * sph.Sample(smp, sphereMapUV))
     //        + spa.Sample(smp, sphereMapUV) * texColor
     //        + saturate(specularB * specular)
