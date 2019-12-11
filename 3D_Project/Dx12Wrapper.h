@@ -40,6 +40,12 @@ struct LightColor
 	float bloom[4];
 };
 
+// ŠeŽíƒtƒ‰ƒO‚È‚Ç
+struct Flags
+{
+	bool GBuffers;
+};
+
 class Dx12Wrapper
 {
 private:
@@ -151,9 +157,15 @@ private:
 	std::string name;
 	std::shared_ptr<Plane> _plane;
 
+	HRESULT CreateFlagsBuffer();
+	Flags flags;
+	Flags *MapFlags;
+	ID3D12Resource* _flagsBuffer;
+	ID3D12DescriptorHeap* _flagsHeap;
+
 	HRESULT CreateColBuffer();
-	float bloomCol[4];
-	float **MapCol;
+	LightColor bloomCol;
+	LightColor *MapCol;
 	ID3D12Resource* _colorBuffer;
 	ID3D12DescriptorHeap* _colDescHeap;
 

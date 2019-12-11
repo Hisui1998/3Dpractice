@@ -511,6 +511,53 @@ HRESULT Dx12Wrapper::CreateShrinkPipline()
 }
 
 
+HRESULT Dx12Wrapper::CreateFlagsBuffer()
+{
+	flags = {};
+	// デスクリプタヒープ作成用の設定
+	D3D12_DESCRIPTOR_HEAP_DESC colDesc = {};
+	colDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	colDesc.NodeMask = 0;
+	colDesc.NumDescriptors = 1;
+	colDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+	auto result = _dev->CreateDescriptorHeap(&colDesc, IID_PPV_ARGS(&_flagsHeap));
+
+	// コンスタン十バッファ用のヒーププロパティ
+	D3D12_HEAP_PROPERTIES cbvHeapProp = {};
+	cbvHeapProp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	cbvHeapProp.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+	cbvHeapProp.CreationNodeMask = 1;
+	cbvHeapProp.VisibleNodeMask = 1;
+	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	auto size = sizeof(flags);
+	size = (size + 0xff)&~0xff;
+
+	// コンスタントバッファの作成
+	result = _dev->CreateCommittedResource(&cbvHeapProp,
+		D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(size),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&_flagsBuffer));
+
+	// コンスタントバッファ用のデスク
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+	cbvDesc.BufferLocation = _flagsBuffer->GetGPUVirtualAddress();
+	cbvDesc.SizeInBytes = static_cast<unsigned int>(size);
+
+	auto handle = _flagsHeap->GetCPUDescriptorHandleForHeapStart();
+	// コンスタントバッファビューの作成
+	_dev->CreateConstantBufferView(&cbvDesc, handle);
+
+	// Mapping
+	result = _flagsBuffer->Map(0, nullptr, (void**)&MapFlags);
+	std::memcpy(MapFlags, &flags, sizeof(flags));
+
+	return result;
+}
+
 HRESULT Dx12Wrapper::CreateColBuffer()
 {
 	// デスクリプタヒープ作成用の設定
@@ -529,6 +576,8 @@ HRESULT Dx12Wrapper::CreateColBuffer()
 	cbvHeapProp.CreationNodeMask = 1;
 	cbvHeapProp.VisibleNodeMask = 1;
 	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	bloomCol.bloom[0] = 0xff;
 
 	auto size = sizeof(bloomCol);
 	size = (size + 0xff)&~0xff;
@@ -786,7 +835,7 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	SamplerDesc[0].MaxAnisotropy = 0;// FilterがAnisotropyのときのみ有効
 
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[7] = {};// 一枚ポリゴン
+	D3D12_DESCRIPTOR_RANGE descRange[8] = {};// 一枚ポリゴン
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
@@ -827,8 +876,14 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	descRange[6].BaseShaderRegister = 0;//レジスタ番号
 	descRange[6].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// 各種フラグ
+	descRange[7].NumDescriptors = 1;
+	descRange[7].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;// カラー値
+	descRange[7].BaseShaderRegister = 1;//レジスタ番号
+	descRange[7].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[7] = {};
+	D3D12_ROOT_PARAMETER rootParam[8] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
@@ -869,13 +924,19 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	rootParam[6].DescriptorTable.pDescriptorRanges = &descRange[6];//対応するレンジへのポインタ
 	rootParam[6].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+																
+	// 各種フラグ
+	rootParam[7].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[7].DescriptorTable.pDescriptorRanges = &descRange[7];//対応するレンジへのポインタ
+	rootParam[7].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[7].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 7;
+	rsd.NumParameters = 8;
 	rsd.NumStaticSamplers = 1;
 
 	auto result = D3D12SerializeRootSignature(
@@ -1109,10 +1170,6 @@ void Dx12Wrapper::DrawFirstPolygon()
 	_cmdList->SetDescriptorHeaps(1,&_srvDescHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(0, srvStart);
 
-	auto ssh = _shrinkSrvHeap->GetGPUDescriptorHandleForHeapStart();
-	_cmdList->SetDescriptorHeaps(1, &_shrinkSrvHeap);
-	_cmdList->SetGraphicsRootDescriptorTable(5, ssh);
-
 	// カメラ深度のセット
 	auto dstart = _dsvSrvHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
@@ -1123,17 +1180,28 @@ void Dx12Wrapper::DrawFirstPolygon()
 	_cmdList->SetDescriptorHeaps(1, &_lightSrvHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(2, lstart);
 
-	// 色のせっと
-	_cmdList->SetDescriptorHeaps(1, &_colDescHeap);
-	auto colStart = _colDescHeap->GetGPUDescriptorHandleForHeapStart();
-	_cmdList->SetGraphicsRootDescriptorTable(6, colStart);
-	   
+
 	_cmdList->SetDescriptorHeaps(1, &_srvDescHeap);
 	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	_cmdList->SetGraphicsRootDescriptorTable(3, srvStart);
 
 	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	_cmdList->SetGraphicsRootDescriptorTable(4, srvStart);
+
+	auto ssh = _shrinkSrvHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_shrinkSrvHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(5, ssh);
+
+	// 色のせっと
+	_cmdList->SetDescriptorHeaps(1, &_colDescHeap);
+	auto colStart = _colDescHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetGraphicsRootDescriptorTable(6, colStart);
+
+
+	// フラグのせっと
+	_cmdList->SetDescriptorHeaps(1, &_flagsHeap);
+	auto flagStart = _flagsHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetGraphicsRootDescriptorTable(7, flagStart);
 
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);
@@ -1201,17 +1269,17 @@ void Dx12Wrapper::DrawSecondPolygon()
 	_cmdList->DrawInstanced(4, 1, 0, 0);	  
 
 	// GUI
-	float col[4] = {};
-	ImGui::SetNextWindowSize(ImVec2(600,400));
+	ImGui::SetNextWindowSize(ImVec2(400,600));
 	ImGui::Begin("gui");
 	ImGui::BulletText("light");
 	ImGui::SliderAngle("ライト角度", &lightangle,-180,180,"%.02f");
 	ImGui::BulletText("instanceNum");
 	ImGui::SliderInt("インスタンス数", &instanceNum,1,25);
 	ImGui::BulletText("blooomColor");
-	ImGui::ColorPicker4("ブルームの色", bloomCol);
-	ImGui::Text(name.c_str());	
+	ImGui::ColorPicker4("ブルームの色", bloomCol.bloom);
+	ImGui::Checkbox("GBuffer",&flags.GBuffers);
 	ImGui::End();
+
 	// 二つ以上出すときはここでもう一度BeginしてEndする
 	ImGui::Render();
 	_cmdList->SetDescriptorHeaps(1, &_imguiDescHeap);
@@ -1426,6 +1494,7 @@ void Dx12Wrapper::KeyUpDate()
 	*_wvpMP = _wvp;// 転送用に書き込む
 
 	*MapCol = bloomCol;
+	*MapFlags = flags;
 }
 
 // 画面描画関数
@@ -1642,6 +1711,9 @@ int Dx12Wrapper::Init()
 
 	if (FAILED(CreateColBuffer()))
 		return 20;
+
+	if (FAILED(CreateFlagsBuffer()))
+		return 21;
 
 
 	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};

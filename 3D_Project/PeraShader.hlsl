@@ -25,6 +25,12 @@ cbuffer colors : register(b0)
     float4 bloomCol;
 };
 
+// 色情報
+cbuffer flags : register(b1)
+{
+    bool GBuffer;
+};
+
 // ガウシアンぼかしの式
 float4 GaussianFilteredColor5x5(Texture2D<float4> intex,SamplerState smpst,float2 inuv,float dx, float dy)
 {
@@ -107,35 +113,37 @@ float4 peraPS(Out o) : SV_TarGet
     
    
     //return ret3 * texColor;
-    
-    if ((o.uv.x <= 0.2) && (o.uv.y <= 0.2))
+    if (GBuffer)
     {
-        float dep = depth.Sample(smp, o.uv * 5);
-        dep = pow(dep, 100);
-        return 1-float4(dep, dep, dep, 1);
+        if ((o.uv.x <= 0.2) && (o.uv.y <= 0.2))
+        {
+            float dep = depth.Sample(smp, o.uv * 5);
+            dep = pow(dep, 100);
+            return 1 - float4(dep, dep, dep, 1);
+        }
+        else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.4))
+        {
+            float dep = lightdepth.Sample(smp, o.uv * 5);
+            dep = pow(dep, 100);
+            return 1 - float4(dep, dep, dep, 1);
+        }
+        else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.6))
+        {
+            float4 dep = normal.Sample(smp, o.uv * 5);
+            return dep;
+        }
+        else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.8))
+        {
+            float4 dep = bloom.Sample(smp, o.uv * 5);
+            return dep;
+        }
+        else if ((o.uv.x <= 0.2) && (o.uv.y <= 1.0))
+        {
+            float4 dep = shrink.Sample(smp, o.uv * 5);
+            return dep;
+        }
     }
-    else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.4))
-    {
-        float dep = lightdepth.Sample(smp, o.uv * 5);
-        dep = pow(dep, 100);
-        return 1-float4(dep, dep, dep, 1);
-    }
-    else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.6))
-    {
-        float4 dep = normal.Sample(smp, o.uv * 5);
-        return dep;
-    }
-    else if ((o.uv.x <= 0.2) && (o.uv.y <= 0.8))
-    {
-        float4 dep = bloom.Sample(smp, o.uv * 5);
-        return dep;
-    }
-    else if ((o.uv.x <= 0.2) && (o.uv.y <= 1.0))
-    {
-        float4 dep = shrink.Sample(smp, o.uv * 5);
-        return dep;
-    }
-    
+        
     float4 oneBloom = GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy);
     float4 bloomSum = float4(0, 0, 0, 0);
     float2 uvSize = float2(1, 0.5);
@@ -147,7 +155,7 @@ float4 peraPS(Out o) : SV_TarGet
         uvSize *= 0.5f;
     }   
     //return bloomCol;
-    return texColor + GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy) + saturate(bloomCol*bloomSum);
+    return texColor + saturate((GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy) + bloomCol) * bloomSum);
     
     //return float4(aa, texColor.a);
     //return oneBloom;
