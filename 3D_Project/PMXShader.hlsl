@@ -70,9 +70,10 @@ struct Out
 
 struct PixelOut
 {
-    float4 zero : SV_TARGET0;
-    float4 one : SV_TARGET1;
-    float4 two : SV_TARGET2;
+    float4 def : SV_TARGET0;
+    float4 norm : SV_TARGET1;
+    float4 shine : SV_TARGET2;
+    float4 outline : SV_TARGET3;
 };
 
 // 頂点シェーダ
@@ -200,14 +201,19 @@ PixelOut ps(Out o)
     float dbright = 1;// 影の強さ
     if (shadowpos.z >= depth + 0.00005f)
     {
-        //texColor.rgb *= 0.5;
         toonDif = toon.Sample(smpToon, float2(0, 1));
     }
-    po.zero = saturate(texColor * diffuse * toonDif);
-    po.one = float4(o.normal, 1);
-        
+    
+    // 通常テクスチャ
+    po.def = saturate(texColor * diffuse * toonDif);
+    // 法線
+    po.norm = float4(o.normal, 1);
+    // 高輝度
     float y = dot(float3(0.3f, 0.6f, 0.1f), texColor.rgb);
-    po.two = y > 0.99f ? texColor : 0.0;
+    po.shine = y > 0.99f ? texColor : 0.0;
+    // アウトライン用
+    po.outline = float4(1,1,1,1);
+    //po.outline = texColor * diffuse;
     
     return po;
     

@@ -114,5 +114,6 @@
     <FxCompile Include="plane.hlsl" />
     <FxCompile Include="FXAA.hlsl" />
     <FxCompile Include="Shrink.hlsl" />
+    <FxCompile Include="scene.hlsl" />
   </ItemGroup>
 </Project>

@@ -510,6 +510,170 @@ HRESULT Dx12Wrapper::CreateShrinkPipline()
 	return result;
 }
 
+HRESULT Dx12Wrapper::CreateSceneBuffer()
+{
+	Size wsize = Application::Instance().GetWindowSize();
+
+	D3D12_RESOURCE_DESC ResDesc = {};
+	ResDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	ResDesc.Width = wsize.width;
+	ResDesc.Height = wsize.height;
+	ResDesc.DepthOrArraySize = 1;
+	ResDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	ResDesc.SampleDesc.Count = 1;
+	ResDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+	D3D12_CLEAR_VALUE clear = { DXGI_FORMAT_R8G8B8A8_UNORM ,{0.1f,0.1f,0.1f,0.0f}, };
+
+	// バッファ作成
+	auto result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&ResDesc,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		&clear,
+		IID_PPV_ARGS(&_sceneBuffer)
+	);
+
+	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
+	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	descHeapDesc.NodeMask = 0;
+	descHeapDesc.NumDescriptors = 1;
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+
+	// レンダーターゲットデスクリプタヒープの作成
+	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_sceneRtvHeap));
+
+	descHeapDesc.NumDescriptors = 1;
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;// タイプ変更
+	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+	// シェーダーリソースデスクリプタヒープの作成
+	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_sceneSrvHeap));
+
+	_dev->CreateRenderTargetView(_sceneBuffer, nullptr, _shrinkRtvHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// シェーダーリソースビューの作成
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+
+	_dev->CreateShaderResourceView(_sceneBuffer, &srvDesc, _sceneSrvHeap->GetCPUDescriptorHandleForHeapStart());
+	return result;
+}
+
+void Dx12Wrapper::DrawToSceneBuffer()
+{
+	float col[4] = { 0.1f,0.1f,0.1f,0.0 };
+	auto handle = _sceneRtvHeap->GetCPUDescriptorHandleForHeapStart();
+
+	_cmdAlloc->Reset();
+	_cmdList->Reset(_cmdAlloc, nullptr);
+
+	// レンダーターゲット指定
+	_cmdList->OMSetRenderTargets(1, &handle, false, nullptr);
+	_cmdList->ClearRenderTargetView(handle, col, 0, nullptr);// クリア
+
+	// シグネチャとパイプラインの設定
+	_cmdList->SetGraphicsRootSignature(_peraSignature);
+	_cmdList->SetPipelineState(_scenePipeline);
+
+	// 頂点バッファとトポロジの設定
+	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	_cmdList->IASetVertexBuffers(0, 1, &_peravbView);
+
+	auto start = _srvDescHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_srvDescHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(0, start);
+
+	// ビューポートの設定
+	D3D12_VIEWPORT vp = {};
+	vp.TopLeftX = 0;
+	vp.TopLeftY = 0;
+	vp.Width = static_cast<float>(Application::Instance().GetWindowSize().width);
+	vp.Height = static_cast<float>(Application::Instance().GetWindowSize().height) / 2;
+	vp.MaxDepth = 1.0f;
+	vp.MinDepth = 0.0f;
+
+	// シザーの設定
+	D3D12_RECT sr = {};
+	sr.left = 0;
+	sr.top = 0;
+	sr.right = vp.Width;
+	sr.bottom = vp.Height;
+
+	for (int i = 0; i < 8; ++i)
+	{
+		_cmdList->RSSetViewports(1, &vp);
+		_cmdList->RSSetScissorRects(1, &sr);
+		_cmdList->DrawInstanced(4, 1, 0, 0);
+
+		vp.TopLeftY += vp.Height;
+		sr.top = vp.TopLeftY;
+		vp.Height /= 2;
+		vp.Width /= 2;
+		sr.bottom = sr.top + vp.Height;
+	}
+
+	_cmdList->Close();
+}
+
+HRESULT Dx12Wrapper::CreateScenePipline()
+{
+	auto result = D3DCompileFromFile(L"scene.hlsl", nullptr, nullptr, "sceneVS", "vs_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader, nullptr);
+
+	// ピクセルシェーダ
+	result = D3DCompileFromFile(L"scene.hlsl", nullptr, nullptr, "scenePS", "ps_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraPixShader, nullptr);
+
+	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
+	{
+		// Pos
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0, D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// UV
+		{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+	};
+
+	// パイプラインを作るためのGPSの変数の作成
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC gpsDesc = {};
+
+	//ルートシグネチャと頂点レイアウト
+	gpsDesc.pRootSignature = _peraSignature;
+	gpsDesc.InputLayout.pInputElementDescs = peraLayoutDescs;
+	gpsDesc.InputLayout.NumElements = _countof(peraLayoutDescs);
+
+	//シェーダのセット
+	gpsDesc.VS = CD3DX12_SHADER_BYTECODE(peraVertShader);
+	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(peraPixShader);
+
+	//レンダーターゲット
+	gpsDesc.NumRenderTargets = 1;
+	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	//深度ステンシル
+	gpsDesc.DepthStencilState.DepthEnable = false;
+	gpsDesc.DepthStencilState.StencilEnable = false;
+
+	//ラスタライザ
+	gpsDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	gpsDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+
+	//その他
+	gpsDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	gpsDesc.NodeMask = 0;
+	gpsDesc.SampleDesc.Count = 1;
+	gpsDesc.SampleDesc.Quality = 0;
+	gpsDesc.SampleMask = 0xffffffff;
+	gpsDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;//三角形
+
+	result = _dev->CreateGraphicsPipelineState(&gpsDesc, IID_PPV_ARGS(&_scenePipeline));
+
+	return result;
+}
+
 
 HRESULT Dx12Wrapper::CreateFlagsBuffer()
 {
@@ -577,7 +741,7 @@ HRESULT Dx12Wrapper::CreateColBuffer()
 	cbvHeapProp.VisibleNodeMask = 1;
 	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
 
-	bloomCol.bloom[0] = 0xff;
+	bloomCol.bloom[4] = 0;
 
 	auto size = sizeof(bloomCol);
 	size = (size + 0xff)&~0xff;
@@ -698,18 +862,17 @@ HRESULT Dx12Wrapper::CreatePolygonVertexBuffer()
 // 一枚目ポリゴンの作成
 HRESULT Dx12Wrapper::CreateFirstPolygon()
 {
-	_peraBuffers.resize(3);
+	_peraBuffers.resize(4);
 	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
 	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 	descHeapDesc.NodeMask = 0;
-	descHeapDesc.NumDescriptors = 3;
+	descHeapDesc.NumDescriptors = _peraBuffers.size();
 	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 
 	// レンダーターゲットデスクリプタヒープの作成
 	auto result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_rtvDescHeap));
 
 	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	descHeapDesc.NumDescriptors = 3;
 	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;// タイプ変更
 
 	// シェーダーリソースデスクリプタヒープの作成
@@ -835,7 +998,7 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	SamplerDesc[0].MaxAnisotropy = 0;// FilterがAnisotropyのときのみ有効
 
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[8] = {};// 一枚ポリゴン
+	D3D12_DESCRIPTOR_RANGE descRange[10] = {};// 一枚ポリゴン
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
@@ -878,12 +1041,24 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 
 	// 各種フラグ
 	descRange[7].NumDescriptors = 1;
-	descRange[7].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;// カラー値
+	descRange[7].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;// フラグ
 	descRange[7].BaseShaderRegister = 1;//レジスタ番号
 	descRange[7].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// 
+	descRange[8].NumDescriptors = 1;
+	descRange[8].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// tex
+	descRange[8].BaseShaderRegister = 6;//レジスタ番号
+	descRange[8].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	// 縮小テクスチャ
+	descRange[9].NumDescriptors = 1;
+	descRange[9].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// tex
+	descRange[9].BaseShaderRegister = 7;//レジスタ番号
+	descRange[9].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[8] = {};
+	D3D12_ROOT_PARAMETER rootParam[10] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
@@ -919,7 +1094,7 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	rootParam[5].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
-	// シュリンク
+	// カラー
 	rootParam[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[6].DescriptorTable.pDescriptorRanges = &descRange[6];//対応するレンジへのポインタ
 	rootParam[6].DescriptorTable.NumDescriptorRanges = 1;
@@ -931,12 +1106,24 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	rootParam[7].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[7].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
+	// 縮小てくすた
+	rootParam[8].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[8].DescriptorTable.pDescriptorRanges = &descRange[8];//対応するレンジへのポインタ
+	rootParam[8].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[8].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
+	// 縮小てくすた
+	rootParam[9].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[9].DescriptorTable.pDescriptorRanges = &descRange[9];//対応するレンジへのポインタ
+	rootParam[9].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[9].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 8;
+	rsd.NumParameters = 10;
 	rsd.NumStaticSamplers = 1;
 
 	auto result = D3D12SerializeRootSignature(
@@ -1197,11 +1384,18 @@ void Dx12Wrapper::DrawFirstPolygon()
 	auto colStart = _colDescHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetGraphicsRootDescriptorTable(6, colStart);
 
-
 	// フラグのせっと
 	_cmdList->SetDescriptorHeaps(1, &_flagsHeap);
 	auto flagStart = _flagsHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetGraphicsRootDescriptorTable(7, flagStart);
+	
+	_cmdList->SetDescriptorHeaps(1, &_srvDescHeap);
+	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	_cmdList->SetGraphicsRootDescriptorTable(8, srvStart);
+
+	_cmdList->SetDescriptorHeaps(1, &_sceneSrvHeap);
+	auto scene = _sceneSrvHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetGraphicsRootDescriptorTable(9, scene);
 
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);
@@ -1528,7 +1722,7 @@ void Dx12Wrapper::ScreenUpDate()
 	_cmdList->ClearDepthStencilView(depthStart, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	// リソースバリア
-	for (int i= 0;i<3;++i)
+	for (int i= 0;i< _peraBuffers.size();++i)
 	{
 		_cmdList->ResourceBarrier(1,
 			&CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1542,7 +1736,7 @@ void Dx12Wrapper::ScreenUpDate()
 	_cmdList->OMSetRenderTargets(_peraBuffers.size(), &peraStart, true, &depthStart);
 
 	//レンダーターゲットのクリア
-	for (int i = 0; i < 3; ++i)
+	for (int i = 0; i < _peraBuffers.size(); ++i)
 	{
 		_cmdList->ClearRenderTargetView(peraStart, clearColor, 0, nullptr);
 		peraStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -1568,7 +1762,7 @@ void Dx12Wrapper::ScreenUpDate()
 	EffekseerRendererDX12::EndCommandList(_efkCmdList);
 
 	// リソースバリア
-	for (int i = 0; i < 3; ++i)
+	for (int i = 0; i < _peraBuffers.size(); ++i)
 	{
 		_cmdList->ResourceBarrier(1,
 			&CD3DX12_RESOURCE_BARRIER::Transition(
@@ -1589,6 +1783,15 @@ void Dx12Wrapper::ScreenUpDate()
 
 	// 高輝度
 	DrawToShrinkBuffer();
+
+	// コマンド追加とフェンス
+	ExecuteCommand();
+
+	// 待ち
+	WaitWithFence();
+	
+	// 被写界深度
+	DrawToSceneBuffer();
 
 	// コマンド追加とフェンス
 	ExecuteCommand();
@@ -1656,7 +1859,7 @@ int Dx12Wrapper::Init()
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/ヤゴコロダンス.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
@@ -1708,12 +1911,18 @@ int Dx12Wrapper::Init()
 
 	if (FAILED(CreateShrinkPipline()))
 		return 19;
-
-	if (FAILED(CreateColBuffer()))
+	
+	if (FAILED(CreateSceneBuffer()))
 		return 20;
 
-	if (FAILED(CreateFlagsBuffer()))
+	if (FAILED(CreateScenePipline()))
 		return 21;
+
+	if (FAILED(CreateColBuffer()))
+		return 22;
+
+	if (FAILED(CreateFlagsBuffer()))
+		return 23;
 
 
 	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};

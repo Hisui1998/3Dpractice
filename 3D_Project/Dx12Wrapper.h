@@ -116,7 +116,15 @@ private:
 	ID3D12PipelineState* _shrinkPipeline = nullptr;// パイプライン
 	HRESULT CreateShrinkPipline();
 
+	// ひしゃかいしーんど
+	ID3D12Resource* _sceneBuffer = nullptr;// 高輝度バッファ
+	ID3D12DescriptorHeap* _sceneRtvHeap;// 深度バッファデスクリプタヒープ
+	ID3D12DescriptorHeap* _sceneSrvHeap;// 深度SRVデスクリプタヒーぷ
 
+	HRESULT CreateSceneBuffer();// バッファ作成
+	void DrawToSceneBuffer();// バッファへの書き込み
+	ID3D12PipelineState* _scenePipeline = nullptr;// パイプライン
+	HRESULT CreateScenePipline();
 
 	// スワップチェイン用
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ

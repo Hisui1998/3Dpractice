@@ -1088,10 +1088,11 @@ HRESULT PMXmodel::CreatePipeline()
 	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader);
 
 	//レンダーターゲット
-	gpsDesc.NumRenderTargets = 3;
+	gpsDesc.NumRenderTargets = 4;
 	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 	gpsDesc.RTVFormats[1] = DXGI_FORMAT_R8G8B8A8_UNORM;
 	gpsDesc.RTVFormats[2] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	gpsDesc.RTVFormats[3] = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 	//深度ステンシル
 	gpsDesc.DepthStencilState.DepthEnable = true;

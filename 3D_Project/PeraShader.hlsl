@@ -1,20 +1,19 @@
 //テクスチャ
 Texture2D<float4> tex : register(t0);
-
 //深度テクスチャ
 Texture2D<float4> depth : register(t1);
-
 //深度テクスチャライト
 Texture2D<float4> lightdepth : register(t2);
-
 //法線
 Texture2D<float4> normal : register(t3);
-
 //ブルーム
 Texture2D<float4> bloom : register(t4);
-
 //明るさ
 Texture2D<float4> shrink : register(t5);
+//アウトライン
+Texture2D<float4> outline : register(t6);
+//アウトライン
+Texture2D<float4> scene : register(t7);
 
 // サンプラ
 SamplerState smp : register(s0);
@@ -24,7 +23,6 @@ cbuffer colors : register(b0)
 {
     float4 bloomCol;
 };
-
 // 色情報
 cbuffer flags : register(b1)
 {
@@ -91,32 +89,23 @@ float4 peraPS(Out o) : SV_TarGet
     tex.GetDimensions(0, w, h, level);
     float dx = 1 / w;
     float dy = 1 / h;
-    float4 ret = texColor;
-    ret = ret * 4 -
-    tex.Sample(smp, o.uv + float2(-dx, 0)) -
-    tex.Sample(smp, o.uv + float2(dx, 0)) -
-    tex.Sample(smp, o.uv + float2(0, dy)) -
-    tex.Sample(smp, o.uv + float2(0, -dy));
-    float b = dot(float3(0.3f, 0.3f, 0.4f), 1 - ret.rgb);
-    b = pow(b, 4);
-
-    float ret2 = depth.Sample(smp, o.uv);
-    ret2 = ret * 4 -
-    depth.Sample(smp, o.uv + float2(-dx*4, 0)) -
-    depth.Sample(smp, o.uv + float2(dx*4, 0)) -
-    depth.Sample(smp, o.uv + float2(0, dy*4)) -
-    depth.Sample(smp, o.uv + float2(0, -dy*4));
     
-    ret2 = dot(0.4f, 1 - ret2);
-    ret2 = pow(ret2,1);
-    //return float4(ret2, ret2, ret2, 1) * texColor;
+    float4 GaussTex = GaussianFilteredColor5x5(tex, smp, o.uv, dx, dy);
+    float edgesize = 2.f;
+    float4 tc = outline.Sample(smp, o.uv);
+    tc = tc * 4 -
+    outline.Sample(smp, o.uv + float2(-dx * edgesize, 0)) -
+    outline.Sample(smp, o.uv + float2(dx * edgesize, 0)) -
+    outline.Sample(smp, o.uv + float2(0, dy * edgesize)) -
+    outline.Sample(smp, o.uv + float2(0, -dy * edgesize));
+    float edge = dot(float3(0.3f, 0.3f, 0.4f), 1 - tc.rgb);
+    edge = pow(edge,10);
     
-   
-    //return ret3 * texColor;
     if (GBuffer)
     {
         if ((o.uv.x <= 0.2) && (o.uv.y <= 0.2))
         {
+            // カメラからの深度値
             float dep = depth.Sample(smp, o.uv * 5);
             dep = pow(dep, 100);
             return 1 - float4(dep, dep, dep, 1);
@@ -142,6 +131,11 @@ float4 peraPS(Out o) : SV_TarGet
             float4 dep = shrink.Sample(smp, o.uv * 5);
             return dep;
         }
+        else if ((o.uv.x <= 0.4) && (o.uv.y <= 0.2))
+        {
+            float4 dep = scene.Sample(smp, o.uv * 5);
+            return dep;
+        }
     }
         
     float4 oneBloom = GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy);
@@ -153,11 +147,13 @@ float4 peraPS(Out o) : SV_TarGet
         bloomSum += GaussianFilteredColor5x5(shrink, smp, o.uv * uvSize + uvOffset, dx, dy);
         uvOffset.y += uvSize.y;
         uvSize *= 0.5f;
-    }   
-    //return bloomCol;
-    return texColor + saturate((GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy) + bloomCol) * bloomSum);
+    }
     
-    //return float4(aa, texColor.a);
-    //return oneBloom;
-    return float4(1, b, b, 1) * texColor;
+    return float4(1, edge, edge, edge)
+    *texColor + saturate((GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy) + bloomCol) * bloomSum);
+    
+    return GaussTex; // ガウスぼかし
+    return float4(1, edge, edge, 1); // 輪郭線のみ
+    return oneBloom;// 等倍ブルーム
+    return float4(1, edge, edge, 1) * texColor; // 輪郭線+テクスチャカラー
 }
