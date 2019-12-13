@@ -541,17 +541,16 @@ HRESULT Dx12Wrapper::CreateSceneBuffer()
 	descHeapDesc.NumDescriptors = 1;
 	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 
-	// レンダーターゲットデスクリプタヒープの作成
+	// でぷすデスクリプタヒープの作成
 	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_sceneRtvHeap));
 
-	descHeapDesc.NumDescriptors = 1;
 	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;// タイプ変更
 	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
 	// シェーダーリソースデスクリプタヒープの作成
 	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_sceneSrvHeap));
 
-	_dev->CreateRenderTargetView(_sceneBuffer, nullptr, _shrinkRtvHeap->GetCPUDescriptorHandleForHeapStart());
+	_dev->CreateRenderTargetView(_sceneBuffer, nullptr, _sceneRtvHeap->GetCPUDescriptorHandleForHeapStart());
 
 	// シェーダーリソースビューの作成
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -567,14 +566,13 @@ HRESULT Dx12Wrapper::CreateSceneBuffer()
 void Dx12Wrapper::DrawToSceneBuffer()
 {
 	float col[4] = { 0.1f,0.1f,0.1f,0.0 };
-	auto handle = _sceneRtvHeap->GetCPUDescriptorHandleForHeapStart();
 
 	_cmdAlloc->Reset();
 	_cmdList->Reset(_cmdAlloc, nullptr);
+	auto rtvStart = _sceneRtvHeap->GetCPUDescriptorHandleForHeapStart();
 
-	// レンダーターゲット指定
-	_cmdList->OMSetRenderTargets(1, &handle, false, nullptr);
-	_cmdList->ClearRenderTargetView(handle, col, 0, nullptr);// クリア
+	_cmdList->OMSetRenderTargets(1, &rtvStart,false,nullptr);
+	_cmdList->ClearRenderTargetView(rtvStart,col,0,nullptr);
 
 	// シグネチャとパイプラインの設定
 	_cmdList->SetGraphicsRootSignature(_peraSignature);
@@ -674,10 +672,170 @@ HRESULT Dx12Wrapper::CreateScenePipline()
 	return result;
 }
 
+HRESULT Dx12Wrapper::CreateSSAOPS()
+{
+	ID3DBlob* SSAOVS = nullptr;
+	ID3DBlob* SSAOPS = nullptr;
+
+	auto result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, nullptr, "peraVS", "vs_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &SSAOVS, nullptr);
+
+	// ピクセルシェーダ
+	result = D3DCompileFromFile(L"SSAO.hlsl", nullptr, nullptr, "SSAOPS", "ps_5_0", D3DCOMPILE_DEBUG |
+		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &SSAOPS, nullptr);
+
+	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
+	{
+		// Pos
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0, D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+		// UV
+		{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,D3D12_APPEND_ALIGNED_ELEMENT,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+	};
+
+	// パイプラインを作るためのGPSの変数の作成
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC gpsDesc = {};
+
+	//ルートシグネチャと頂点レイアウト
+	gpsDesc.pRootSignature = _peraSignature;
+	gpsDesc.InputLayout.pInputElementDescs = peraLayoutDescs;
+	gpsDesc.InputLayout.NumElements = _countof(peraLayoutDescs);
+
+	//シェーダのセット
+	gpsDesc.VS = CD3DX12_SHADER_BYTECODE(SSAOVS);
+	gpsDesc.PS = CD3DX12_SHADER_BYTECODE(SSAOPS);
+
+	//レンダーターゲット
+	gpsDesc.NumRenderTargets = 1;
+	gpsDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	//深度ステンシル
+	gpsDesc.DepthStencilState.DepthEnable = false;
+	gpsDesc.DepthStencilState.StencilEnable = false;
+
+	//ラスタライザ
+	gpsDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	gpsDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+
+	//その他
+	gpsDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	gpsDesc.NodeMask = 0;
+	gpsDesc.SampleDesc.Count = 1;
+	gpsDesc.SampleDesc.Quality = 0;
+	gpsDesc.SampleMask = 0xffffffff;
+	gpsDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;//三角形
+
+	result = _dev->CreateGraphicsPipelineState(&gpsDesc, IID_PPV_ARGS(&_SSAOPipeline));
+
+	return result;
+}
+
+HRESULT Dx12Wrapper::CreateSSAOBuffer()
+{
+	Size wsize = Application::Instance().GetWindowSize();
+
+	D3D12_RESOURCE_DESC ResDesc = {};
+	ResDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	ResDesc.Width = wsize.width;
+	ResDesc.Height = wsize.height;
+	ResDesc.DepthOrArraySize = 1;
+	ResDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	ResDesc.SampleDesc.Count = 1;
+	ResDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+	D3D12_CLEAR_VALUE clear = { DXGI_FORMAT_R32_FLOAT ,{1,1,1,1}, };
+
+	// バッファ作成
+	auto result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&ResDesc,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		&clear,
+		IID_PPV_ARGS(&_SSAOBuffer)
+	);
+
+	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};
+	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	descHeapDesc.NodeMask = 0;
+	descHeapDesc.NumDescriptors = 1;
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+
+	// レンダーターゲットデスクリプタヒープの作成
+	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_SSAORtv));
+
+	descHeapDesc.NumDescriptors = 1;
+	descHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;// タイプ変更
+	descHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+	// シェーダーリソースデスクリプタヒープの作成
+	result = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_SSAOSrv));
+
+	_dev->CreateRenderTargetView(_SSAOBuffer, nullptr, _SSAORtv->GetCPUDescriptorHandleForHeapStart());
+
+	// シェーダーリソースビューの作成
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+
+	_dev->CreateShaderResourceView(_SSAOBuffer, &srvDesc, _SSAOSrv->GetCPUDescriptorHandleForHeapStart());
+	return result;
+}
+
+void Dx12Wrapper::DrawToSSAO()
+{
+	_cmdAlloc->Reset();
+	_cmdList->Reset(_cmdAlloc, nullptr);
+	auto rtvStart = _SSAORtv->GetCPUDescriptorHandleForHeapStart();
+
+	_cmdList->OMSetRenderTargets(1, &rtvStart, false, nullptr);
+
+	// シグネチャとパイプラインの設定
+	_cmdList->SetGraphicsRootSignature(_peraSignature);
+	_cmdList->SetPipelineState(_SSAOPipeline);
+
+	// 頂点バッファとトポロジの設定
+	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	_cmdList->IASetVertexBuffers(0, 1, &_peravbView);
+
+	// 深度値
+	auto dstart = _dsvSrvHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(1, dstart);
+
+	auto srvStart = _srvDescHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_srvDescHeap);
+	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	_cmdList->SetGraphicsRootDescriptorTable(3, srvStart);
+
+	// ビューポートの設定
+	D3D12_VIEWPORT vp = {};
+	vp.TopLeftX = 0;
+	vp.TopLeftY = 0;
+	vp.Width = static_cast<float>(Application::Instance().GetWindowSize().width);
+	vp.Height = static_cast<float>(Application::Instance().GetWindowSize().height);
+	vp.MaxDepth = 1.0f;
+	vp.MinDepth = 0.0f;
+
+	// シザーの設定
+	D3D12_RECT sr = {};
+	sr.left = 0;
+	sr.top = 0;
+	sr.right = vp.Width;
+	sr.bottom = vp.Height;
+
+	_cmdList->RSSetViewports(1, &vp);
+	_cmdList->RSSetScissorRects(1, &sr);
+	_cmdList->DrawInstanced(4, 1, 0, 0);
+
+	_cmdList->Close();
+}
+
 
 HRESULT Dx12Wrapper::CreateFlagsBuffer()
 {
-	flags = {};
+	flags = {true,false};
 	// デスクリプタヒープ作成用の設定
 	D3D12_DESCRIPTOR_HEAP_DESC colDesc = {};
 	colDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -741,7 +899,7 @@ HRESULT Dx12Wrapper::CreateColBuffer()
 	cbvHeapProp.VisibleNodeMask = 1;
 	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
 
-	bloomCol.bloom[4] = 0;
+	bloomCol.bloom[0]= bloomCol.bloom[1]=bloomCol.bloom[2] = 1;
 
 	auto size = sizeof(bloomCol);
 	size = (size + 0xff)&~0xff;
@@ -998,7 +1156,7 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	SamplerDesc[0].MaxAnisotropy = 0;// FilterがAnisotropyのときのみ有効
 
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[10] = {};// 一枚ポリゴン
+	D3D12_DESCRIPTOR_RANGE descRange[11] = {};// 一枚ポリゴン
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
@@ -1057,8 +1215,14 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	descRange[9].BaseShaderRegister = 7;//レジスタ番号
 	descRange[9].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// SSAO
+	descRange[10].NumDescriptors = 1;
+	descRange[10].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// SSAotex
+	descRange[10].BaseShaderRegister = 8;//レジスタ番号
+	descRange[10].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[10] = {};
+	D3D12_ROOT_PARAMETER rootParam[11] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
@@ -1118,12 +1282,18 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	rootParam[9].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[9].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
+	// SSAO
+	rootParam[10].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[10].DescriptorTable.pDescriptorRanges = &descRange[10];//対応するレンジへのポインタ
+	rootParam[10].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[10].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 10;
+	rsd.NumParameters = 11;
 	rsd.NumStaticSamplers = 1;
 
 	auto result = D3D12SerializeRootSignature(
@@ -1397,6 +1567,11 @@ void Dx12Wrapper::DrawFirstPolygon()
 	auto scene = _sceneSrvHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetGraphicsRootDescriptorTable(9, scene);
 
+	// SSAOのせっと
+	_cmdList->SetDescriptorHeaps(1, &_SSAOSrv);
+	auto SSAOStart = _SSAOSrv->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetGraphicsRootDescriptorTable(10, SSAOStart);
+
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);
 
@@ -1471,7 +1646,8 @@ void Dx12Wrapper::DrawSecondPolygon()
 	ImGui::SliderInt("インスタンス数", &instanceNum,1,25);
 	ImGui::BulletText("blooomColor");
 	ImGui::ColorPicker4("ブルームの色", bloomCol.bloom);
-	ImGui::Checkbox("GBuffer",&flags.GBuffers);
+	ImGui::CheckboxFlags("GBuffer", &(flags.GBuffers),1);
+	ImGui::CheckboxFlags("CenterLine",&(flags.CenterLine),1);
 	ImGui::End();
 
 	// 二つ以上出すときはここでもう一度BeginしてEndする
@@ -1799,6 +1975,15 @@ void Dx12Wrapper::ScreenUpDate()
 	// 待ち
 	WaitWithFence();
 
+	// SSAO
+	DrawToSSAO();
+
+	// コマンド追加とフェンス
+	ExecuteCommand();
+
+	// 待ち
+	WaitWithFence();
+
 	// ポリゴンの描画
 	DrawFirstPolygon();
 
@@ -1807,6 +1992,7 @@ void Dx12Wrapper::ScreenUpDate()
 
 	// 待ち
 	WaitWithFence();
+
 
 	// ポリゴンの描画
 	DrawSecondPolygon();
@@ -1880,49 +2066,56 @@ int Dx12Wrapper::Init()
 		return 4;
 
 	if (FAILED(CreateDepthStencilView()))
-		return 7;
+		return 5;
 
 	if (FAILED(CreateWVPConstantBuffer()))
-		return 10;
+		return 6;
 
 	if (FAILED(CreateFirstPolygon()))
-		return 11;
+		return 7;
 
 	if (FAILED(CreateFirstSignature()))
-		return 12;
+		return 8;
 
 	if (FAILED(CreateFirstPopelineState()))
-		return 13;
+		return 9;
 
 	if (FAILED(CreateSecondPolygon()))
-		return 14;
+		return 10;
 
 	if (FAILED(CreateSecondSignature()))
-		return 15;
+		return 11;
 
 	if (FAILED(CreateSecondPopelineState()))
-		return 16;
+		return 12;
 
 	if (FAILED(CreatePolygonVertexBuffer()))
-		return 17;
+		return 13;
 	
 	if (FAILED(CreateShrinkBuffer()))
-		return 18;
+		return 14;
 
 	if (FAILED(CreateShrinkPipline()))
-		return 19;
+		return 15;
 	
 	if (FAILED(CreateSceneBuffer()))
-		return 20;
+		return 16;
 
 	if (FAILED(CreateScenePipline()))
-		return 21;
+		return 17;
 
 	if (FAILED(CreateColBuffer()))
-		return 22;
+		return 18;
 
 	if (FAILED(CreateFlagsBuffer()))
-		return 23;
+		return 19;
+
+	if (FAILED(CreateSSAOBuffer()))
+		return 20;
+
+	if (FAILED(CreateSSAOPS()))
+		return 21;
+	
 
 
 	D3D12_DESCRIPTOR_HEAP_DESC descHeapDesc = {};

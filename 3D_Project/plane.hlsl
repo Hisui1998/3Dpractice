@@ -10,6 +10,7 @@ cbuffer mat : register(b0)
     matrix world;
     matrix view;
     matrix projection;
+    matrix invproj;
     matrix wvp;
     matrix lvp;
     float3 lightPos;

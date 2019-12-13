@@ -22,6 +22,7 @@ struct WVPMatrix {
 	DirectX::XMMATRIX world;
 	DirectX::XMMATRIX view;
 	DirectX::XMMATRIX projection;
+	DirectX::XMMATRIX invproj;// 逆プロジェクション
 	DirectX::XMMATRIX wvp;
 	DirectX::XMMATRIX lvp;
 	DirectX::XMFLOAT3 lightPos;
@@ -43,7 +44,8 @@ struct LightColor
 // 各種フラグなど
 struct Flags
 {
-	bool GBuffers;
+	unsigned int GBuffers;
+	unsigned int CenterLine;
 };
 
 class Dx12Wrapper
@@ -118,13 +120,23 @@ private:
 
 	// ひしゃかいしーんど
 	ID3D12Resource* _sceneBuffer = nullptr;// 高輝度バッファ
-	ID3D12DescriptorHeap* _sceneRtvHeap;// 深度バッファデスクリプタヒープ
+	ID3D12DescriptorHeap* _sceneRtvHeap;// レンダーターゲットバッファデスクリプタヒープ
 	ID3D12DescriptorHeap* _sceneSrvHeap;// 深度SRVデスクリプタヒーぷ
 
 	HRESULT CreateSceneBuffer();// バッファ作成
 	void DrawToSceneBuffer();// バッファへの書き込み
 	ID3D12PipelineState* _scenePipeline = nullptr;// パイプライン
 	HRESULT CreateScenePipline();
+
+	// SSAO
+	HRESULT CreateSSAOPS();
+	HRESULT CreateSSAOBuffer();// バッファ作成
+	void DrawToSSAO();// バッファへの書き込み
+	ID3D12PipelineState* _SSAOPipeline = nullptr;// パイプライン
+	ID3D12Resource* _SSAOBuffer;
+	ID3D12DescriptorHeap* _SSAORtv;
+	ID3D12DescriptorHeap* _SSAOSrv;
+
 
 	// スワップチェイン用
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ

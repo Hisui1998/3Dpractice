@@ -6,14 +6,16 @@ Texture2D<float4> depth : register(t1);
 Texture2D<float4> lightdepth : register(t2);
 //法線
 Texture2D<float4> normal : register(t3);
-//ブルーム
+//高輝度
 Texture2D<float4> bloom : register(t4);
-//明るさ
+//ブルーム等の縮小バッファ
 Texture2D<float4> shrink : register(t5);
-//アウトライン
+//輪郭線抽出用影絵
 Texture2D<float4> outline : register(t6);
-//アウトライン
+//被写界深度用縮小バッファ
 Texture2D<float4> scene : register(t7);
+//SSAo
+Texture2D<float> ssaotex : register(t8);
 
 // サンプラ
 SamplerState smp : register(s0);
@@ -23,10 +25,11 @@ cbuffer colors : register(b0)
 {
     float4 bloomCol;
 };
-// 色情報
+// huragu
 cbuffer flags : register(b1)
 {
-    bool GBuffer;
+    int GBuffer;
+    int CenterLine;
 };
 
 // ガウシアンぼかしの式
@@ -91,6 +94,8 @@ float4 peraPS(Out o) : SV_TarGet
     float dy = 1 / h;
     
     float4 GaussTex = GaussianFilteredColor5x5(tex, smp, o.uv, dx, dy);
+    float4 GaussScene = GaussianFilteredColor5x5(scene, smp, o.uv, dx, dy);
+    
     float edgesize = 2.f;
     float4 tc = outline.Sample(smp, o.uv);
     tc = tc * 4 -
@@ -100,12 +105,22 @@ float4 peraPS(Out o) : SV_TarGet
     outline.Sample(smp, o.uv + float2(0, -dy * edgesize));
     float edge = dot(float3(0.3f, 0.3f, 0.4f), 1 - tc.rgb);
     edge = pow(edge,10);
-    
-    if (GBuffer)
+    if (CenterLine.r)
+    {
+        if ((o.uv.x <= 0.5005f) && (o.uv.x >= 0.4995f))
+        {
+            return 1-texColor;
+        }
+        else if ((o.uv.y <= 0.501f) && (o.uv.y >= 0.499f))
+        {
+            return 1 - texColor;
+        }
+    }
+    if (GBuffer.r)
     {
         if ((o.uv.x <= 0.2) && (o.uv.y <= 0.2))
         {
-            // カメラからの深度値
+        // カメラからの深度値
             float dep = depth.Sample(smp, o.uv * 5);
             dep = pow(dep, 100);
             return 1 - float4(dep, dep, dep, 1);
@@ -133,7 +148,12 @@ float4 peraPS(Out o) : SV_TarGet
         }
         else if ((o.uv.x <= 0.4) && (o.uv.y <= 0.2))
         {
-            float4 dep = scene.Sample(smp, o.uv * 5);
+            float4 dep = GaussianFilteredColor5x5(scene, smp, o.uv * 5, dx, dy);
+            return dep;
+        }
+        else if ((o.uv.x <= 0.4) && (o.uv.y <= 0.4))
+        {
+            float4 dep = ssaotex.Sample(smp, o.uv * 5);
             return dep;
         }
     }
@@ -149,8 +169,39 @@ float4 peraPS(Out o) : SV_TarGet
         uvSize *= 0.5f;
     }
     
-    return float4(1, edge, edge, edge)
-    *texColor + saturate((GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy) + bloomCol) * bloomSum);
+    //画面真ん中からの深度の差を測る
+    float depthDiff = abs(depth.Sample(smp, float2(0.5, 0.5)) - depth.Sample(smp, o.uv));
+    depthDiff = pow(depthDiff, 0.5f);
+    uvSize = float2(1, 0.5);
+    uvOffset = float2(0, 0);
+    float t = depthDiff * 8;
+    float no;
+    t = modf(t, no);// noには整数部が入って、返り値は余りの小数部が帰ってくる
+    float4 retColor[2];
+    retColor[0] = tex.Sample(smp, o.uv); //通常テクスチャ
+    if (no == 0.0f)
+    {
+        retColor[1] = GaussianFilteredColor5x5(scene, smp, o.uv * uvSize + uvOffset, dx*2, dy*2);
+    }
+    else
+    {
+        for (int i = 1; i <= 8; ++i)
+        {
+            if (i - no < 0)
+                continue;
+            retColor[i - no] = GaussianFilteredColor5x5(scene, smp, o.uv * uvSize + uvOffset, dx*2, dy*2);
+            uvOffset.y += uvSize.y;
+            uvSize *= 0.5f;
+            if (i - no > 1)
+            {
+                break;
+            }
+        }
+    }
+    
+    return lerp(retColor[0], retColor[1], t) + bloomCol * bloomSum;
+    
+    return float4(1, edge, edge, edge)*texColor + saturate((GaussianFilteredColor5x5(bloom, smp, o.uv, dx, dy) + bloomCol) * bloomSum);
     
     return GaussTex; // ガウスぼかし
     return float4(1, edge, edge, 1); // 輪郭線のみ

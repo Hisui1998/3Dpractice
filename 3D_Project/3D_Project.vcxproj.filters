@@ -115,5 +115,6 @@
     <FxCompile Include="FXAA.hlsl" />
     <FxCompile Include="Shrink.hlsl" />
     <FxCompile Include="scene.hlsl" />
+    <FxCompile Include="SSAO.hlsl" />
   </ItemGroup>
 </Project>
