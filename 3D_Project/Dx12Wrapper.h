@@ -46,6 +46,7 @@ struct Flags
 {
 	unsigned int GBuffers;
 	unsigned int CenterLine;
+	float _Time;
 };
 
 class Dx12Wrapper
@@ -108,7 +109,7 @@ private:
 	ID3D12DescriptorHeap* _lightDescHeap;// 深度バッファデスクリプタヒープ
 	ID3D12DescriptorHeap* _lightSrvHeap;// 深度SRVデスクリプタヒープ	
 
-	// 光らせるやーつ
+	// 高輝度
 	ID3D12Resource* _shrinkBuffer = nullptr;// 高輝度バッファ
 	ID3D12DescriptorHeap* _shrinkRtvHeap;// 深度バッファデスクリプタヒープ
 	ID3D12DescriptorHeap* _shrinkSrvHeap;// 深度SRVデスクリプタヒーぷ
@@ -136,8 +137,7 @@ private:
 	ID3D12Resource* _SSAOBuffer;
 	ID3D12DescriptorHeap* _SSAORtv;
 	ID3D12DescriptorHeap* _SSAOSrv;
-
-
+	
 	// スワップチェイン用
 	ID3D12DescriptorHeap* _swcDescHeap = nullptr;// SWC(スワップチェイン)デスクリプタヒープ
 	std::vector<ID3D12Resource*>renderTargets;// スワップチェインで使うバッファのRTV	
@@ -176,6 +176,8 @@ private:
 	std::vector<std::shared_ptr<PMXmodel>> pmxModels;
 	std::string name;
 	std::shared_ptr<Plane> _plane;
+
+	float flame;
 
 	HRESULT CreateFlagsBuffer();
 	Flags flags;

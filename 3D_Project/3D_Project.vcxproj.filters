@@ -116,5 +116,6 @@
     <FxCompile Include="Shrink.hlsl" />
     <FxCompile Include="scene.hlsl" />
     <FxCompile Include="SSAO.hlsl" />
+    <FxCompile Include="RayMarchingTest.hlsl" />
   </ItemGroup>
 </Project>

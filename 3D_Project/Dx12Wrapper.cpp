@@ -182,6 +182,7 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 		DirectX::XMLoadFloat3(&up)
 	);
 
+
 	// 正射影行列の算出
 	lightproj = XMMatrixOrthographicLH(100, 100, 1.f,1500.f);
 
@@ -196,6 +197,9 @@ HRESULT Dx12Wrapper::CreateWVPConstantBuffer()
 
 	// プロジェクション行列の計算
 	_wvp.projection = XMMatrixPerspectiveFovLH(XM_PIDIV4,static_cast<float>(wsize.width) / static_cast<float>(wsize.height),0.1f,1000.0f);
+
+	XMVECTOR det;
+	_wvp.invproj = XMMatrixInverse(&det, _wvp.projection);
 
 	// ライトビュープロジェクションの算出
 	_wvp.lvp = lightview * lightproj;
@@ -798,16 +802,22 @@ void Dx12Wrapper::DrawToSSAO()
 	// 頂点バッファとトポロジの設定
 	_cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	_cmdList->IASetVertexBuffers(0, 1, &_peravbView);
-
+	
 	// 深度値
 	auto dstart = _dsvSrvHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetDescriptorHeaps(1, &_dsvSrvHeap);
 	_cmdList->SetGraphicsRootDescriptorTable(1, dstart);
 
+	// 法線
 	auto srvStart = _srvDescHeap->GetGPUDescriptorHandleForHeapStart();
 	_cmdList->SetDescriptorHeaps(1, &_srvDescHeap);
 	srvStart.ptr += _dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	_cmdList->SetGraphicsRootDescriptorTable(3, srvStart);
+
+	// デスクリプタテーブルのセット(WVP)
+	auto wvpStart = _wvpDescHeap->GetGPUDescriptorHandleForHeapStart();
+	_cmdList->SetDescriptorHeaps(1, &_wvpDescHeap);
+	_cmdList->SetGraphicsRootDescriptorTable(0, wvpStart);
 
 	// ビューポートの設定
 	D3D12_VIEWPORT vp = {};
@@ -899,7 +909,7 @@ HRESULT Dx12Wrapper::CreateColBuffer()
 	cbvHeapProp.VisibleNodeMask = 1;
 	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
 
-	bloomCol.bloom[0]= bloomCol.bloom[1]=bloomCol.bloom[2] = 1;
+	bloomCol.bloom[0]= bloomCol.bloom[1] = bloomCol.bloom[2] = 1;
 
 	auto size = sizeof(bloomCol);
 	size = (size + 0xff)&~0xff;
@@ -1155,8 +1165,10 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	SamplerDesc[0].RegisterSpace = 0;// わからん
 	SamplerDesc[0].MaxAnisotropy = 0;// FilterがAnisotropyのときのみ有効
 
+	const int NumParameters = 12;
+
 	// レンジの設定
-	D3D12_DESCRIPTOR_RANGE descRange[11] = {};// 一枚ポリゴン
+	D3D12_DESCRIPTOR_RANGE descRange[NumParameters] = {};// 一枚ポリゴン
 	descRange[0].NumDescriptors = 1;
 	descRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;// シェーダーリソース
 	descRange[0].BaseShaderRegister = 0;//レジスタ番号
@@ -1221,8 +1233,14 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	descRange[10].BaseShaderRegister = 8;//レジスタ番号
 	descRange[10].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// SSAO
+	descRange[11].NumDescriptors = 1;
+	descRange[11].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+	descRange[11].BaseShaderRegister = 2;//レジスタ番号
+	descRange[11].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// ルートパラメータ変数の設定
-	D3D12_ROOT_PARAMETER rootParam[11] = {};
+	D3D12_ROOT_PARAMETER rootParam[NumParameters] = {};
 	rootParam[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParam[0].DescriptorTable.pDescriptorRanges = &descRange[0];//対応するレンジへのポインタ
 	rootParam[0].DescriptorTable.NumDescriptorRanges = 1;
@@ -1287,13 +1305,19 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 	rootParam[10].DescriptorTable.pDescriptorRanges = &descRange[10];//対応するレンジへのポインタ
 	rootParam[10].DescriptorTable.NumDescriptorRanges = 1;
 	rootParam[10].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
+	
+	// SSAO
+	rootParam[11].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParam[11].DescriptorTable.pDescriptorRanges = &descRange[11];//対応するレンジへのポインタ
+	rootParam[11].DescriptorTable.NumDescriptorRanges = 1;
+	rootParam[11].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;//すべてのシェーダから参照
 
 	// ルートシグネチャを作るための変数の設定
 	D3D12_ROOT_SIGNATURE_DESC rsd = {};
 	rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	rsd.pStaticSamplers = SamplerDesc;
 	rsd.pParameters = rootParam;
-	rsd.NumParameters = 11;
+	rsd.NumParameters = 12;
 	rsd.NumStaticSamplers = 1;
 
 	auto result = D3D12SerializeRootSignature(
@@ -1426,11 +1450,14 @@ HRESULT Dx12Wrapper::CreateSecondSignature()
 // 二枚目ポリゴン用のパイプラインの作成
 HRESULT Dx12Wrapper::CreateSecondPopelineState()
 {
-	auto result = D3DCompileFromFile(L"pera2.hlsl", nullptr, nullptr, "pera2VS", "vs_5_0", D3DCOMPILE_DEBUG |
+	std::wstring s_name = L"pera2.hlsl";
+	//std::wstring s_name = L"RayMarchingTest.hlsl";
+
+	auto result = D3DCompileFromFile(s_name.c_str(), nullptr, nullptr, "pera2VS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader2, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"pera2.hlsl", nullptr, nullptr, "pera2PS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(s_name.c_str(), nullptr, nullptr, "pera2PS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraPixShader2, nullptr);
 
 	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
@@ -1674,6 +1701,7 @@ Dx12Wrapper::Dx12Wrapper(HWND hwnd) :_hwnd(hwnd)
 	eye = XMFLOAT3(0, 10, -25);
 	target = XMFLOAT3(0, 10, 0);
 	up = XMFLOAT3(0, 1, 0);
+	flags._Time = 0;
 	// イニシャライズ
 	auto result = CoInitializeEx(0, COINIT_MULTITHREADED);
 }
@@ -1993,7 +2021,6 @@ void Dx12Wrapper::ScreenUpDate()
 	// 待ち
 	WaitWithFence();
 
-
 	// ポリゴンの描画
 	DrawSecondPolygon();
 
@@ -2045,11 +2072,11 @@ int Dx12Wrapper::Init()
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
-	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));
 
 
 	SetEfkRenderer();
@@ -2142,6 +2169,7 @@ int Dx12Wrapper::Init()
 // ラッパーの更新
 void Dx12Wrapper::UpDate()
 {
+	flags._Time+=XM_PI/360;
 	KeyUpDate();
 	ScreenUpDate();
 }
