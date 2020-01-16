@@ -24,6 +24,7 @@ SamplerState smp : register(s0);
 cbuffer colors : register(b0)
 {
     float4 bloomCol;
+    float4 marchCol;
 };
 // huragu
 cbuffer flags : register(b1)
@@ -31,6 +32,7 @@ cbuffer flags : register(b1)
     int GBuffer;
     int CenterLine;
     float _Time;
+    int MarchingCnt;
 };
 
 // ガウシアンぼかしの式
@@ -96,6 +98,16 @@ float2 mod2(float2 a, float2 b)
     return a - b * floor(a / b);
 }
 
+// 係数を出す関数
+float3 mod3(float3 a, float b)
+{
+    float3 ret = float3(0,0,0);
+    ret.x = a.x - b * floor(a.x / b);
+    ret.y = a.y - b * floor(a.y / b);
+    ret.z = a.z - b * floor(a.z / b);
+    return ret;
+}
+
 // 座標をずらす関数
 float2 divSpace2d(float2 pos, float interval, float offset = 0)
 {
@@ -142,38 +154,13 @@ float Box(float3 pos, float3 size)
 float3 MoveBox(float3 pos)
 {
     float interval = sin(_Time) + 5;
-    pos.xz = divSpace2d(pos.zx, 5);
-    pos.yz = divSpace2d(pos.zy, 5);
+    pos.xz = divSpace2d(pos.zx, 3);
+    pos.yz = divSpace2d(pos.zy, 3);
     //pos.xy = divSpace2d(pos.yx, interval);
-    //pos.xz = rotate2d(pos.zx, _Time);
-    //pos.yz = rotate2d(pos.zy, _Time);
-    //pos.xy = rotate2d(pos.yx, _Time);
+    pos.xz = rotate2d(pos.zx, _Time);
+    pos.yz = rotate2d(pos.zy, _Time);
+    pos.xy = rotate2d(pos.yx, _Time);   
     
-    float scale = 3;
-    float3 offset = float3(1, 1, 1);
-    for (int i = 0; i < 5; i++)
-    {
-        pos = abs(pos);
-        if (pos.x < pos.y)
-        {
-            pos.xy = pos.yx;
-        }
-        if (pos.x < pos.z)
-        {
-            pos.xz = pos.zx;
-        }
-        if (pos.y < pos.z)
-        {
-            pos.yz = pos.zy;
-        }
-        pos *= scale;
-        pos.xyz -= offset * (scale - 1.0);
-        if (pos.z < -0.5 * offset.z * (scale - 1.0))
-        {
-            pos.z += offset.z * (scale - 1.0);
-        }
-    }
-    return (length(max(abs(pos.xyz) - float3(1.0, 1.0, 1.0), 0.0)))/3;
     return pos;
 }
 
@@ -185,13 +172,41 @@ float3 ChangeSizeBox(float3 size)
     return size;
 }
 
+float sdCross(float3 p, float c)
+{
+    p = abs(p);
+    float dxy = max(p.x, p.y);
+    float dyz = max(p.y, p.z);
+    float dxz = max(p.x, p.z);
+    return min(dxy, min(dyz, dxz)) - c;
+}
+
+float sdBox(float3 p, float3 b)
+{
+    p = abs(p) - b;
+    return length(max(p, 0.0)) + min(max(p.x, max(p.y, p.z)), 0.0);
+}
+
+
 // ボックスまでの距離を取得する関数
 float GetBoxDistance(float3 pos, float3 size)
 {
 	// ボックスの座標とサイズの更新
     pos = MoveBox(pos);
     //size = ChangeSizeBox(size);
-
+    
+    float d = sdBox(pos, size);
+    float s = 1.0;
+    for (int i = 0; i < 5; i++)
+    {
+        float3 a = mod3(pos*s, 2.0) - 1.0;
+        s *= 3.0;
+        float3 r = 1.0 - 3.0 * abs(a);
+        float c = sdCross(r, 1.0) / s;
+        d = max(d, c);
+    }
+    return d;
+    
     return Box(pos, size);
 }
 // Box系ここまで-------------------------------------------------
@@ -283,26 +298,27 @@ float4 peraPS(Out o) : SV_Target
             return dep;
         }
     }
-         
-    
-    if (texColor.a <= 0.2f)
+    //if (MarchingCnt)
     {
-        float3 pos = o.pos.rgb;
-        float3 start = float3(0, 0, -2.5);
-        float m = min(w, h);
-        float3 tpos = float3(pos.xy * float2(w / m, h / m), 0);
-        float3 ray = normalize(tpos - start);
-        float sphsize = 1.0f;
-        float3 boxsize = float3(1, 1, 1);
-        int marcingCnt = 0xff;
+        if (texColor.a <= 0.2f)
+        {
+            float3 pos = o.pos.rgb;
+            float3 start = float3(0, 0, -2.5);
+            float m = min(w, h);
+            float3 tpos = float3(pos.xy * float2(w / m, h / m), 0);
+            float3 ray = normalize(tpos - start);
+            float sphsize = 1.0f;
+            float3 boxsize = float3(1, 1, 1);
+            int marcingCnt = MarchingCnt;
         
-        for (int cnt = 0; cnt < marcingCnt; ++cnt)
-        {            
-            float len = GetBoxDistance(start, boxsize);
-            start += ray * len;
-            if (len < 0.001f)
+            for (int cnt = 0; cnt < marcingCnt; ++cnt)
             {
-                return float4((float) (marcingCnt - cnt) / marcingCnt, (float) (marcingCnt - cnt) / marcingCnt, (float) (marcingCnt - cnt) / marcingCnt, 1) * bloomCol;
+                float len = GetBoxDistance(start, boxsize);
+                start += ray * len;
+                if (len < 0.001f)
+                {
+                    return float4((float) (marcingCnt - cnt) / marcingCnt, (float) (marcingCnt - cnt) / marcingCnt, (float) (marcingCnt - cnt) / marcingCnt, 1) * marchCol;
+                }
             }
         }
     }

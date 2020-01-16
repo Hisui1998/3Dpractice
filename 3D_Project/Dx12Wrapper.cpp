@@ -845,7 +845,7 @@ void Dx12Wrapper::DrawToSSAO()
 
 HRESULT Dx12Wrapper::CreateFlagsBuffer()
 {
-	flags = {true,false};
+	flags = {false,false,0,0xff};
 	// デスクリプタヒープ作成用の設定
 	D3D12_DESCRIPTOR_HEAP_DESC colDesc = {};
 	colDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -909,7 +909,8 @@ HRESULT Dx12Wrapper::CreateColBuffer()
 	cbvHeapProp.VisibleNodeMask = 1;
 	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
 
-	bloomCol.bloom[0]= bloomCol.bloom[1] = bloomCol.bloom[2] = 1;
+	bloomCol.bloom[0]= bloomCol.bloom[1] = bloomCol.bloom[2] = 0;
+	bloomCol.marchingCol[0] = bloomCol.marchingCol[1] = bloomCol.marchingCol[2]= bloomCol.marchingCol[3] = 1;
 
 	auto size = sizeof(bloomCol);
 	size = (size + 0xff)&~0xff;
@@ -1673,8 +1674,11 @@ void Dx12Wrapper::DrawSecondPolygon()
 	ImGui::SliderInt("インスタンス数", &instanceNum,1,25);
 	ImGui::BulletText("blooomColor");
 	ImGui::ColorPicker4("ブルームの色", bloomCol.bloom);
+	ImGui::BulletText("MarchingColor");
+	ImGui::ColorPicker4("れいまーちんぐのいろ", bloomCol.marchingCol);
 	ImGui::CheckboxFlags("GBuffer", &(flags.GBuffers),1);
 	ImGui::CheckboxFlags("CenterLine",&(flags.CenterLine),1);
+	ImGui::SliderInt("MarchingCnt",&(flags.MarchingCnt),0,0xff);
 	ImGui::End();
 
 	// 二つ以上出すときはここでもう一度BeginしてEndする
@@ -1701,7 +1705,9 @@ Dx12Wrapper::Dx12Wrapper(HWND hwnd) :_hwnd(hwnd)
 	eye = XMFLOAT3(0, 10, -25);
 	target = XMFLOAT3(0, 10, 0);
 	up = XMFLOAT3(0, 1, 0);
+
 	flags._Time = 0;
+	flags.MarchingCnt = 0xff;
 	// イニシャライズ
 	auto result = CoInitializeEx(0, COINIT_MULTITHREADED);
 }

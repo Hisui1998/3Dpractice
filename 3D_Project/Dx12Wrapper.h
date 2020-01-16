@@ -39,6 +39,7 @@ struct Vertex
 struct LightColor
 {
 	float bloom[4];
+	float marchingCol[4];
 };
 
 // ŠeŽíƒtƒ‰ƒO‚È‚Ç
@@ -47,6 +48,7 @@ struct Flags
 	unsigned int GBuffers;
 	unsigned int CenterLine;
 	float _Time;
+	int MarchingCnt;
 };
 
 class Dx12Wrapper
