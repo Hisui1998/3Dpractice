@@ -94,6 +94,11 @@ Out peraVS(
 }
 
 // 余り
+float mod(float a, float b)
+{
+    return a - b * floor(a / b);
+}
+// 余り
 float2 mod2(float2 a, float2 b)
 {
     return a - b * floor(a / b);
@@ -196,7 +201,7 @@ float Hole(float3 p, float3 b)
 float BoxToSponge(float3 pos, float3 size)
 {
     float d = Hole(pos, size);
-    float s = 1.0;
+    float s = 1 / size;
     for (int i = 0; i < Sponge; i++)
     {
         float3 a = mod3(pos * s, 2.0) - 1.0;
@@ -332,13 +337,19 @@ float4 peraPS(Out o) : SV_Target
         {
             float sphsize = 0.5;// 球体のサイズ
             float3 boxsize = float3(0.5, 0.5,0.5);// 箱のサイズ
-            float3 light = normalize(float3(1,1,-1));
             
             float3 pos = o.pos.rgb;// 座標
-            float3 start = float3(0, 0, -2.5);// レイの飛ばす先端
+            float3 start = float3(0, 0, -2.5); // レイの飛ばす先端
             float m = min(w, h);// アスペクト比調整用
-            float3 tpos = float3(pos.xy * float2(w / m, h / m), 0);// ターゲットのポジション
-            float3 ray = normalize(tpos - start);// レイのベクトル      
+            float3 tpos = float3(pos.xy * float2(w / m, h / m), 0); // ターゲットのポジション
+            float3 ray = normalize(tpos - start); // レイのベクトル 
+            
+            float3 light = normalize(float3(1, 1, -1));
+            
+            light.xz = rotate2d(light.xz, sin(_Time));
+            light.yz = rotate2d(light.yz, cos(_Time));
+            ray.xz = rotate2d(ray.xz, sin(_Time));
+            ray.yz = rotate2d(ray.yz, cos(_Time));
             
             int marcingCnt = MarchingCnt;
         
@@ -360,7 +371,7 @@ float4 peraPS(Out o) : SV_Target
                     }
                     sn /= 3;
                     float n = dot(k, light);
-                    return float4(1, 1, 1, 1) * marchCol * float4(n, n, n, 1);
+                    return float4(1, 1, 1, 1) * marchCol * n;
                 }
             }
         }
