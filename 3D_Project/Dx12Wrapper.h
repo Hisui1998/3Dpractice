@@ -49,6 +49,7 @@ struct Flags
 	unsigned int CenterLine;
 	float _Time;
 	int MarchingCnt;
+	int isSponge;
 };
 
 class Dx12Wrapper

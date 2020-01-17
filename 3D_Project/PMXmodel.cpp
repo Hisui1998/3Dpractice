@@ -1562,11 +1562,26 @@ ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath)
 	TexMetadata metadata = {};
 	ScratchImage scratchImg = {};
 
-	// テクスチャファイルのロード
-	auto result = LoadFromWICFile(GetWstringFromString(texPath).c_str(),
-		WIC_FLAGS_NONE,
-		&metadata,
-		scratchImg);
+	int p = texPath.find_last_of('.');
+	auto path = texPath.substr(p);
+	auto result = S_OK;
+	
+	if (path == ".tga")
+	{
+		// TGAファイルのロード
+		result = LoadFromTGAFile(GetWstringFromString(texPath).c_str(),
+			&metadata,
+			scratchImg);
+	}
+	else
+	{
+		// WICファイルのロード
+		result = LoadFromWICFile(GetWstringFromString(texPath).c_str(),
+			WIC_FLAGS_NONE,
+			&metadata,
+			scratchImg);
+	}
+
 	if (FAILED(result)) {
 		return whiteTex;// 失敗したら白テクスチャを入れる
 	}

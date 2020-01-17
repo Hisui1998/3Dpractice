@@ -33,6 +33,7 @@ cbuffer flags : register(b1)
     int CenterLine;
     float _Time;
     int MarchingCnt;
+    int Sponge;
 };
 
 // ガウシアンぼかしの式
@@ -92,20 +93,15 @@ Out peraVS(
     return o;
 }
 
-// 係数を出す関数
+// 余り
 float2 mod2(float2 a, float2 b)
 {
     return a - b * floor(a / b);
 }
 
-// 係数を出す関数
 float3 mod3(float3 a, float b)
 {
-    float3 ret = float3(0,0,0);
-    ret.x = a.x - b * floor(a.x / b);
-    ret.y = a.y - b * floor(a.y / b);
-    ret.z = a.z - b * floor(a.z / b);
-    return ret;
+    return a - b * floor(a / b);
 }
 
 // 座標をずらす関数
@@ -114,12 +110,18 @@ float2 divSpace2d(float2 pos, float interval, float offset = 0)
     return mod2(pos + offset, interval) - (0.5 * interval);
 }
 
+// 座標をずらす関数
+float3 divSpace3d(float3 pos, float interval, float offset = 0)
+{
+    return mod3(pos + offset, interval) - (0.5 * interval);
+}
+
 // 回転させる関数
 float2 rotate2d(float2 pos, float angle)
 {
     float s = sin(angle);
     float c = cos(angle);
-    return mul(float2x2(c, s, -s, c), pos);
+    return mul(float2x2(c, -s, s, c), pos);
 }
 
 // 球体の距離関数
@@ -130,9 +132,10 @@ float Sphere(float3 pos, float size)
 
 float3 MoveSphere(float3 pos)
 {
-    float interval = 5;
-    pos.xz = float2(mod2(pos.zx, interval) - (0.5 * interval));
-    pos.zy = float2(mod2(pos.yz, interval) - (0.5 * interval));
+    float interval = 3;
+    //pos = divSpace3d(pos, interval);
+    pos.xz = divSpace2d(pos.zx, 3);
+    pos.yz = divSpace2d(pos.zy, 3);
     return pos;
 }
 
@@ -154,12 +157,13 @@ float Box(float3 pos, float3 size)
 float3 MoveBox(float3 pos)
 {
     float interval = sin(_Time) + 5;
+    //pos = divSpace3d(pos, 3);
     pos.xz = divSpace2d(pos.zx, 3);
     pos.yz = divSpace2d(pos.zy, 3);
     //pos.xy = divSpace2d(pos.yx, interval);
     pos.xz = rotate2d(pos.zx, _Time);
     pos.yz = rotate2d(pos.zy, _Time);
-    pos.xy = rotate2d(pos.yx, _Time);   
+    pos.xy = rotate2d(pos.xy, _Time);  
     
     return pos;
 }
@@ -181,12 +185,28 @@ float sdCross(float3 p, float c)
     return min(dxy, min(dyz, dxz)) - c;
 }
 
-float sdBox(float3 p, float3 b)
+// 穴をあける
+float Hole(float3 p, float3 b)
 {
     p = abs(p) - b;
     return length(max(p, 0.0)) + min(max(p.x, max(p.y, p.z)), 0.0);
 }
 
+// ボックスに対して穴をあける
+float BoxToSponge(float3 pos, float3 size)
+{
+    float d = Hole(pos, size);
+    float s = 1.0;
+    for (int i = 0; i < Sponge; i++)
+    {
+        float3 a = mod3(pos * s, 2.0) - 1.0;
+        s *= 3.0;
+        float3 r = 1.0 - 3.0 * abs(a);
+        float c = sdCross(r, 1.0) / s;
+        d = max(d, c);
+    }
+    return d;
+}
 
 // ボックスまでの距離を取得する関数
 float GetBoxDistance(float3 pos, float3 size)
@@ -195,31 +215,38 @@ float GetBoxDistance(float3 pos, float3 size)
     pos = MoveBox(pos);
     //size = ChangeSizeBox(size);
     
-    float d = sdBox(pos, size);
-    float s = 1.0;
-    for (int i = 0; i < 5; i++)
+    if (Sponge)
     {
-        float3 a = mod3(pos*s, 2.0) - 1.0;
-        s *= 3.0;
-        float3 r = 1.0 - 3.0 * abs(a);
-        float c = sdCross(r, 1.0) / s;
-        d = max(d, c);
+        // スポンジにする
+        return BoxToSponge(pos, size);
     }
-    return d;
     
     return Box(pos, size);
 }
 // Box系ここまで-------------------------------------------------
 
 // ボックスの法線ベクトルを返す関数
-float3 GetNormal(float3 pos, float3 size)
+float3 GetBoxNormal(float3 pos, float3 size)
 {
-    float d = 0.001; // 法線を取得する範囲
+    float d = 0.00001; // 法線を取得する範囲
     return normalize(
 	float3(
 		GetBoxDistance(pos + float3(d, 0, 0), size) - GetBoxDistance(pos + float3(-d, 0, 0), size),
 		GetBoxDistance(pos + float3(0, d, 0), size) - GetBoxDistance(pos + float3(0, -d, 0), size),
 		GetBoxDistance(pos + float3(0, 0, d), size) - GetBoxDistance(pos + float3(0, 0, -d), size)
+		)
+    );
+}
+
+// 球体の法線ベクトルを返す関数
+float3 GetSphNormal(float3 pos, float size)
+{
+    float d = 0.00001; // 法線を取得する範囲
+    return normalize(
+	float3(
+		GetSphereDist(pos + float3(d, 0, 0), size) - GetSphereDist(pos + float3(-d, 0, 0), size),
+		GetSphereDist(pos + float3(0, d, 0), size) - GetSphereDist(pos + float3(0, -d, 0), size),
+		GetSphereDist(pos + float3(0, 0, d), size) - GetSphereDist(pos + float3(0, 0, -d), size)
 		)
     );
 }
@@ -246,6 +273,7 @@ float4 peraPS(Out o) : SV_Target
     outline.Sample(smp, o.uv + float2(0, -dy * edgesize));
     float edge = dot(float3(0.3f, 0.3f, 0.4f), 1 - tc.rgb);
     edge = pow(edge,10);
+    
     if (CenterLine)
     {
         if ((o.uv.x <= 0.5005f) && (o.uv.x >= 0.4995f))
@@ -298,26 +326,41 @@ float4 peraPS(Out o) : SV_Target
             return dep;
         }
     }
-    //if (MarchingCnt)
+    if (MarchingCnt)
     {
         if (texColor.a <= 0.2f)
         {
-            float3 pos = o.pos.rgb;
-            float3 start = float3(0, 0, -2.5);
-            float m = min(w, h);
-            float3 tpos = float3(pos.xy * float2(w / m, h / m), 0);
-            float3 ray = normalize(tpos - start);
-            float sphsize = 1.0f;
-            float3 boxsize = float3(1, 1, 1);
+            float sphsize = 0.5;// 球体のサイズ
+            float3 boxsize = float3(0.5, 0.5,0.5);// 箱のサイズ
+            float3 light = normalize(float3(1,1,-1));
+            
+            float3 pos = o.pos.rgb;// 座標
+            float3 start = float3(0, 0, -2.5);// レイの飛ばす先端
+            float m = min(w, h);// アスペクト比調整用
+            float3 tpos = float3(pos.xy * float2(w / m, h / m), 0);// ターゲットのポジション
+            float3 ray = normalize(tpos - start);// レイのベクトル      
+            
             int marcingCnt = MarchingCnt;
         
             for (int cnt = 0; cnt < marcingCnt; ++cnt)
             {
                 float len = GetBoxDistance(start, boxsize);
+                float len2 = GetSphereDist(start, sphsize);
+                
+                len = min(len, len2);
                 start += ray * len;
                 if (len < 0.001f)
                 {
-                    return float4((float) (marcingCnt - cnt) / marcingCnt, (float) (marcingCnt - cnt) / marcingCnt, (float) (marcingCnt - cnt) / marcingCnt, 1) * marchCol;
+                    float3 k = GetSphNormal(start, sphsize);
+                    float sn = GetSphNormal(start, sphsize).r + GetSphNormal(start, sphsize).g + GetSphNormal(start, sphsize).b;
+                    if (len < len2)
+                    {
+                        k = GetBoxNormal(start, boxsize);
+                        sn = GetBoxNormal(start, boxsize).r + GetBoxNormal(start, boxsize).g + GetBoxNormal(start, boxsize).b;
+                    }
+                    sn /= 3;
+                    float n = dot(k, light);
+                    return float4(1, 1, 1, 1) * marchCol * float4(n, n, n, 1);
                 }
             }
         }

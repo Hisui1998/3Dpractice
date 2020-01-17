@@ -855,19 +855,12 @@ HRESULT Dx12Wrapper::CreateFlagsBuffer()
 
 	auto result = _dev->CreateDescriptorHeap(&colDesc, IID_PPV_ARGS(&_flagsHeap));
 
-	// コンスタン十バッファ用のヒーププロパティ
-	D3D12_HEAP_PROPERTIES cbvHeapProp = {};
-	cbvHeapProp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	cbvHeapProp.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-	cbvHeapProp.CreationNodeMask = 1;
-	cbvHeapProp.VisibleNodeMask = 1;
-	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
-
 	auto size = sizeof(flags);
 	size = (size + 0xff)&~0xff;
 
 	// コンスタントバッファの作成
-	result = _dev->CreateCommittedResource(&cbvHeapProp,
+	result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
 		&CD3DX12_RESOURCE_DESC::Buffer(size),
 		D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -885,13 +878,16 @@ HRESULT Dx12Wrapper::CreateFlagsBuffer()
 
 	// Mapping
 	result = _flagsBuffer->Map(0, nullptr, (void**)&MapFlags);
-	std::memcpy(MapFlags, &flags, sizeof(flags));
+	std::memcpy(MapFlags, &flags, size);
 
 	return result;
 }
 
 HRESULT Dx12Wrapper::CreateColBuffer()
 {
+	bloomCol.bloom[0] = bloomCol.bloom[1] = bloomCol.bloom[2] = 0;
+	bloomCol.marchingCol[0] = bloomCol.marchingCol[1] = bloomCol.marchingCol[2] = bloomCol.marchingCol[3] = 1;
+
 	// デスクリプタヒープ作成用の設定
 	D3D12_DESCRIPTOR_HEAP_DESC colDesc = {};
 	colDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -901,22 +897,12 @@ HRESULT Dx12Wrapper::CreateColBuffer()
 
 	auto result = _dev->CreateDescriptorHeap(&colDesc, IID_PPV_ARGS(&_colDescHeap));
 
-	// コンスタン十バッファ用のヒーププロパティ
-	D3D12_HEAP_PROPERTIES cbvHeapProp = {};
-	cbvHeapProp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	cbvHeapProp.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-	cbvHeapProp.CreationNodeMask = 1;
-	cbvHeapProp.VisibleNodeMask = 1;
-	cbvHeapProp.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-	bloomCol.bloom[0]= bloomCol.bloom[1] = bloomCol.bloom[2] = 0;
-	bloomCol.marchingCol[0] = bloomCol.marchingCol[1] = bloomCol.marchingCol[2]= bloomCol.marchingCol[3] = 1;
-
 	auto size = sizeof(bloomCol);
 	size = (size + 0xff)&~0xff;
 
 	// コンスタントバッファの作成
-	result = _dev->CreateCommittedResource(&cbvHeapProp,
+	result = _dev->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE,
 		&CD3DX12_RESOURCE_DESC::Buffer(size),
 		D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -1666,19 +1652,21 @@ void Dx12Wrapper::DrawSecondPolygon()
 	_cmdList->DrawInstanced(4, 1, 0, 0);	  
 
 	// GUI
-	ImGui::SetNextWindowSize(ImVec2(400,600));
+	ImGui::SetNextWindowSize(ImVec2(400,800));
 	ImGui::Begin("gui");
 	ImGui::BulletText("light");
 	ImGui::SliderAngle("ライト角度", &lightangle,-180,180,"%.02f");
 	ImGui::BulletText("instanceNum");
 	ImGui::SliderInt("インスタンス数", &instanceNum,1,25);
+	ImGui::CheckboxFlags("GBuffer", &(flags.GBuffers), 1);
+	ImGui::CheckboxFlags("CenterLine", &(flags.CenterLine), 1);
+	ImGui::SliderInt("MarchingCnt", &(flags.MarchingCnt), 0, 0xff);
+	ImGui::SliderInt("isSponge", &(flags.isSponge), 0,10);
+
 	ImGui::BulletText("blooomColor");
-	ImGui::ColorPicker4("ブルームの色", bloomCol.bloom);
+	ImGui::ColorPicker4("blooomColor", bloomCol.bloom);
 	ImGui::BulletText("MarchingColor");
-	ImGui::ColorPicker4("れいまーちんぐのいろ", bloomCol.marchingCol);
-	ImGui::CheckboxFlags("GBuffer", &(flags.GBuffers),1);
-	ImGui::CheckboxFlags("CenterLine",&(flags.CenterLine),1);
-	ImGui::SliderInt("MarchingCnt",&(flags.MarchingCnt),0,0xff);
+	ImGui::ColorPicker4("MarchingColor", bloomCol.marchingCol);
 	ImGui::End();
 
 	// 二つ以上出すときはここでもう一度BeginしてEndする
@@ -1696,7 +1684,6 @@ void Dx12Wrapper::DrawSecondPolygon()
 }
 
 /// ポリゴン関数ここまで
-
 
 // コンストラクタ
 Dx12Wrapper::Dx12Wrapper(HWND hwnd) :_hwnd(hwnd)
@@ -2082,7 +2069,8 @@ int Dx12Wrapper::Init()
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ニコニ立体ちゃん/Alicia_solid.pmx"));
 
 
 	SetEfkRenderer();
@@ -2175,7 +2163,7 @@ int Dx12Wrapper::Init()
 // ラッパーの更新
 void Dx12Wrapper::UpDate()
 {
-	flags._Time+=XM_PI/360;
+	flags._Time += XM_PI/360;
 	KeyUpDate();
 	ScreenUpDate();
 }
