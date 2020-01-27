@@ -84,7 +84,7 @@ const std::vector<D3D12_INPUT_ELEMENT_DESC> PMDmodel::GetInputLayout()
 
 const LPCWSTR PMDmodel::GetUseShader()
 {
-	return L"PMDShader.hlsl";
+	return L"Shader/PMDShader.hlsl";
 }
 
 ID3D12DescriptorHeap *& PMDmodel::GetBoneHeap()

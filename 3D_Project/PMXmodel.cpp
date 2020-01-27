@@ -1,7 +1,6 @@
 #pragma once
 #include "PMXmodel.h"
 #include <d3d12.h>
-#include <iostream>
 #include <dxgi1_6.h>
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
@@ -14,13 +13,20 @@
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib,"DirectXTex.lib")
 
+#ifdef _DEBUG
+#include <iostream>
+#endif
+
+
 std::map<std::string, ID3D12Resource*> PMXmodel::_texMap;
 int PMXmodel::ModelNum = 0;
 
 void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 {
 	ModelNum++;
+#ifdef _DEBUG
 	std::cout << ModelNum<< "体目のモデルを読み込みます。" << std::endl;
+#endif
 	
 	FILE*fp;
 	std::string ModelPath = modelPath;
@@ -45,7 +51,9 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 				str[num] = c;
 			}
 		}
+#ifdef _DEBUG
 		std::wcout << str << std::endl;
+#endif
 	}
 	
 	int vertexNum=0;
@@ -249,12 +257,14 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 					fread(&l.maxRadlim, sizeof(l.maxRadlim), 1, fp);
 				}
 			}
+#ifdef _DEBUG
 			std::wcout << L"IK ボーン番号=" << idx << L":" << _bones[idx].name << std::endl;
 
 			for (auto& ik : _bones[idx].ikdata.ikLinks) {
 				std::wcout << L"\t ノードボーン=" << ik.linkboneIdx << L":" << _bones[ik.linkboneIdx].name << std::endl;
 			}
 			std::cout << '\n' << std::endl;
+#endif
 		}
 	}
 
@@ -331,8 +341,10 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	}	
 
 	fclose(fp);
+#ifdef _DEBUG
 	std::cout << "読み込み完了。" << std::endl;
 	std::cout << ModelNum << "体目のモデルの初期化を開始します。" << std::endl;
+#endif
 
 	if (vmdPath != "")
 	{
@@ -389,7 +401,9 @@ void PMXmodel::LoadModel(const std::string modelPath, const std::string vmdPath)
 	CreateBoneTree();
 
 	result = CreateBoneBuffer();
+#ifdef _DEBUG
 	std::cout << "初期化完了。" << std::endl;
+#endif
 }
 
 void PMXmodel::BufferUpDate()
@@ -650,11 +664,11 @@ HRESULT PMXmodel::CreateShadowRS()
 
 HRESULT PMXmodel::CreateShadowPS()
 {
-	auto result = D3DCompileFromFile(L"Shadow.hlsl", nullptr, nullptr, "shadowVS", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"Shader/Shadow.hlsl", nullptr, nullptr, "shadowVS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &_shadowVertShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"Shadow.hlsl", nullptr, nullptr, "shadowPS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"Shader/Shadow.hlsl", nullptr, nullptr, "shadowPS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &_shadowPixShader, nullptr);
 
 	auto InputLayout = GetInputLayout();
@@ -1067,11 +1081,11 @@ HRESULT PMXmodel::CreatePipeline()
 	ID3DBlob* pixelShader = nullptr;
 
 	// 頂点シェーダ
-	auto result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"Shader/PMXShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &vertexShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"PMXShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"Shader/PMXShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pixelShader, nullptr);
 	auto inputLayout = GetInputLayout();
 
@@ -1546,7 +1560,7 @@ const XMFLOAT3 PMXmodel::GetPos()
 
 const LPCWSTR PMXmodel::GetUseShader()
 {
-	return L"PMXShader.hlsl";
+	return L"Shader/PMXShader.hlsl";
 }
 
 ID3D12Resource * PMXmodel::LoadTextureFromFile(std::string & texPath)

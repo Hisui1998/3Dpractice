@@ -106,16 +106,16 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="PMXShader.hlsl" />
-    <FxCompile Include="PMDShader.hlsl" />
-    <FxCompile Include="PeraShader.hlsl" />
-    <FxCompile Include="pera2.hlsl" />
-    <FxCompile Include="Shadow.hlsl" />
-    <FxCompile Include="plane.hlsl" />
-    <FxCompile Include="FXAA.hlsl" />
-    <FxCompile Include="Shrink.hlsl" />
-    <FxCompile Include="scene.hlsl" />
-    <FxCompile Include="SSAO.hlsl" />
-    <FxCompile Include="RayMarchingTest.hlsl" />
+    <FxCompile Include="Shader\FXAA.hlsl" />
+    <FxCompile Include="Shader\pera2.hlsl" />
+    <FxCompile Include="Shader\PeraShader.hlsl" />
+    <FxCompile Include="Shader\plane.hlsl" />
+    <FxCompile Include="Shader\PMDShader.hlsl" />
+    <FxCompile Include="Shader\PMXShader.hlsl" />
+    <FxCompile Include="Shader\RayMarchingTest.hlsl" />
+    <FxCompile Include="Shader\scene.hlsl" />
+    <FxCompile Include="Shader\Shadow.hlsl" />
+    <FxCompile Include="Shader\Shrink.hlsl" />
+    <FxCompile Include="Shader\SSAO.hlsl" />
   </ItemGroup>
 </Project>

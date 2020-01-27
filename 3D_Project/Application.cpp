@@ -14,12 +14,12 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 
 LRESULT WindowProcedure(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {
+	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam);
 	if (msg == WM_DESTROY)
 	{
 		PostQuitMessage(0);
 		return 0;
 	}
-	ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam);
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
@@ -55,7 +55,7 @@ int Application::Init()
 
 	_hwnd = CreateWindow(
 		_wndClass.lpszClassName,
-		("DX12の練習"),
+		("1701337_井上飛吹 DirectX12練習"),
 		WS_OVERLAPPEDWINDOW,// タイトルバーと境界線があるウィンドウ
 		CW_USEDEFAULT,// OS依存
 		CW_USEDEFAULT,// OS依存
@@ -84,6 +84,7 @@ void Application::Run()
 			DispatchMessage(&msg);
 		}
 		if (msg.message == WM_QUIT) {// 終了
+			PostQuitMessage(0);
 			break;
 		}
 

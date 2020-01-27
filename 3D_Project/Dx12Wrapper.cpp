@@ -462,11 +462,11 @@ void Dx12Wrapper::DrawToShrinkBuffer()
 
 HRESULT Dx12Wrapper::CreateShrinkPipline()
 {
-	auto result = D3DCompileFromFile(L"Shrink.hlsl", nullptr, nullptr, "shrinkVS", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"Shader/Shrink.hlsl", nullptr, nullptr, "shrinkVS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"Shrink.hlsl", nullptr, nullptr, "shrinkPS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"Shader/Shrink.hlsl", nullptr, nullptr, "shrinkPS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraPixShader, nullptr);
 
 	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
@@ -624,11 +624,11 @@ void Dx12Wrapper::DrawToSceneBuffer()
 
 HRESULT Dx12Wrapper::CreateScenePipline()
 {
-	auto result = D3DCompileFromFile(L"scene.hlsl", nullptr, nullptr, "sceneVS", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"Shader/scene.hlsl", nullptr, nullptr, "sceneVS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"scene.hlsl", nullptr, nullptr, "scenePS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"Shader/scene.hlsl", nullptr, nullptr, "scenePS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraPixShader, nullptr);
 
 	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
@@ -681,11 +681,11 @@ HRESULT Dx12Wrapper::CreateSSAOPS()
 	ID3DBlob* SSAOVS = nullptr;
 	ID3DBlob* SSAOPS = nullptr;
 
-	auto result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, nullptr, "peraVS", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"Shader/PeraShader.hlsl", nullptr, nullptr, "peraVS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &SSAOVS, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"SSAO.hlsl", nullptr, nullptr, "SSAOPS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"Shader/SSAO.hlsl", nullptr, nullptr, "SSAOPS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &SSAOPS, nullptr);
 
 	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
@@ -1326,11 +1326,11 @@ HRESULT Dx12Wrapper::CreateFirstSignature()
 // 一枚目ポリゴン用のパイプラインの作成
 HRESULT Dx12Wrapper::CreateFirstPopelineState()
 {
-	auto result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "peraVS", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"Shader/PeraShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "peraVS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"PeraShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "peraPS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"Shader/PeraShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "peraPS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraPixShader, nullptr);
 
 	D3D12_INPUT_ELEMENT_DESC peraLayoutDescs[] =
@@ -1437,8 +1437,8 @@ HRESULT Dx12Wrapper::CreateSecondSignature()
 // 二枚目ポリゴン用のパイプラインの作成
 HRESULT Dx12Wrapper::CreateSecondPopelineState()
 {
-	std::wstring s_name = L"pera2.hlsl";
-	//std::wstring s_name = L"RayMarchingTest.hlsl";
+	std::wstring s_name = L"Shader/pera2.hlsl";
+	//std::wstring s_name = L"Shader/RayMarchingTest.hlsl";
 
 	auto result = D3DCompileFromFile(s_name.c_str(), nullptr, nullptr, "pera2VS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &peraVertShader2, nullptr);
@@ -1651,20 +1651,33 @@ void Dx12Wrapper::DrawSecondPolygon()
 	// ポリゴンの描画
 	_cmdList->DrawInstanced(4, 1, 0, 0);	  
 
+	// GUIの初期化
+	ImGui_ImplDX12_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGuiContext& context = *GImGui;
+	if (!(context.IO.DisplaySize.x >= 0.0f && context.IO.DisplaySize.y >= 0.0f))
+	{
+		context.IO.DisplaySize = ImVec2(Application::Instance().GetWindowSize().width, Application::Instance().GetWindowSize().height);
+	}
+	ImGui::NewFrame();
 	// GUI
-	ImGui::SetNextWindowSize(ImVec2(400,800));
-	ImGui::Begin("gui");
-	ImGui::BulletText("light");
-	ImGui::SliderAngle("ライト角度", &lightangle,-180,180,"%.02f");
-	ImGui::BulletText("instanceNum");
-	ImGui::SliderInt("インスタンス数", &instanceNum,1,25);
+	ImGui::SetNextWindowSize(ImVec2(400,600));
+	ImGui::Begin("Info ^p^");
+	ImGui::SliderAngle("light", &lightangle,-180,180,"%.02f");
+	ImGui::SliderInt("instanceNum", &instanceNum,1,25);
 	ImGui::CheckboxFlags("GBuffer", &(flags.GBuffers), 1);
 	ImGui::CheckboxFlags("CenterLine", &(flags.CenterLine), 1);
-	ImGui::SliderInt("MarchingCnt", &(flags.MarchingCnt), 0, 0xff);
-	ImGui::SliderInt("isSponge", &(flags.isSponge), 0,10);
 
 	ImGui::BulletText("blooomColor");
 	ImGui::ColorPicker4("blooomColor", bloomCol.bloom);
+
+	ImGui::Spacing();
+	ImGui::CollapsingHeader("BackGround");
+
+	ImGui::SliderInt("MarchingCnt", &(flags.MarchingCnt), 0, 0xff);
+	ImGui::SliderInt("isSponge", &(flags.isSponge), 0, 10);
+	ImGui::CheckboxFlags("ModelOff", &(flags.Modeloff), 1);
+	ImGui::CheckboxFlags("BackGroundOff", &(flags.BackOff), 1);
 	ImGui::BulletText("MarchingColor");
 	ImGui::ColorPicker4("MarchingColor", bloomCol.marchingCol);
 	ImGui::End();
@@ -1714,11 +1727,6 @@ Dx12Wrapper::~Dx12Wrapper()
 // キー入力更新関数
 void Dx12Wrapper::KeyUpDate()
 {
-	// GUIの毎ﾌﾚｰﾑ初期化
-	ImGui_ImplDX12_NewFrame();
-	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
-
 	auto wsize = Application::Instance().GetWindowSize();
 	// キーの入力
 	char Oldkey[256];
@@ -2065,12 +2073,12 @@ int Dx12Wrapper::Init()
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/GUMI/GUMIβ_V3.pmx", "VMD/DanceRobotDance_Motion.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/45秒GUMI.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx", "VMD/45秒GUMI.vmd"));
-	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
+	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびフラン/ちびフラン標準ボーン.pmx", "VMD/ヤゴコロダンス.vmd"));
 
 	/* Aポーズ(テスト用 */
 	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ちびルーミア/ちびルーミア.pmx"));
-	pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ニコニ立体ちゃん/Alicia_solid.pmx"));
+	//pmxModels.emplace_back(std::make_shared<PMXmodel>(_dev, "model/PMX/ニコニ立体ちゃん/Alicia_solid.pmx"));
 
 
 	SetEfkRenderer();
@@ -2148,7 +2156,9 @@ int Dx12Wrapper::Init()
 	auto imguiresult = _dev->CreateDescriptorHeap(&descHeapDesc, IID_PPV_ARGS(&_imguiDescHeap));
 
 	ImGui::CreateContext();
+
 	imguiresult = ImGui_ImplWin32_Init(_hwnd);
+
 	assert(imguiresult);
 	imguiresult = ImGui_ImplDX12_Init(_dev, 2,
 		DXGI_FORMAT_R8G8B8A8_UNORM, 
@@ -2156,6 +2166,7 @@ int Dx12Wrapper::Init()
 		_imguiDescHeap->GetCPUDescriptorHandleForHeapStart(),
 		_imguiDescHeap->GetGPUDescriptorHandleForHeapStart());
 	assert(imguiresult);
+
 
 	return 0;
 }

@@ -50,6 +50,8 @@ struct Flags
 	float _Time;
 	int MarchingCnt;
 	int isSponge;
+	unsigned int Modeloff;
+	unsigned int BackOff;
 };
 
 class Dx12Wrapper

@@ -1,15 +1,20 @@
 #pragma once
-#include <iostream>
 #include "Application.h"
 
+#ifdef _DEBUG
+#include <iostream>
 int main()
-//int WINAPI WinMain(HINSTANCE,HINSTANCE,LPSTR,int)// 自身のハンドル、呼び出し側のハンドル、引数のポインタ、引数の数
+#else
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
+#endif
 {
 	auto& app = Application::Instance();
 
 	if (int i = app.Init())
+#ifdef _DEBUG
+
 	{
-		std::cout << i <<"番目の初期化に失敗" << std::endl;
+		std::cout << i << "番目の初期化に失敗" << std::endl;
 		getchar();
 		return -1;
 	}
@@ -18,6 +23,10 @@ int main()
 	std::cout << "UP,DOWN:カメラの上下移動" << std::endl;
 	std::cout << "Q,LEFT,E,RIGHT:カメラのY軸回転" << std::endl;
 	std::cout << "WASD:カメラの平面移動" << std::endl;
+#else
+	{};
+#endif
+
 	app.Run();
 
 	app.End();

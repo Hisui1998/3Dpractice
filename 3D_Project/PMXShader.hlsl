@@ -1,7 +1,7 @@
 #define FXAA_GRAY_AS_LUMA 1
 #define FXAA_PC 1
 #define FXAA_HLSL_5 1
-#include"FXAA.hlsl"
+#include"Shader/FXAA.hlsl"
 
 // テクスチャ
 Texture2D<float4> tex : register(t0);

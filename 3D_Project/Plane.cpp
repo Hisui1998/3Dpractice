@@ -6,11 +6,11 @@ using namespace DirectX;
 
 bool Plane::CreatePipeline()
 {
-	auto result = D3DCompileFromFile(L"Plane.hlsl", nullptr, nullptr, "PlaneVS", "vs_5_0", D3DCOMPILE_DEBUG |
+	auto result = D3DCompileFromFile(L"Shader/Plane.hlsl", nullptr, nullptr, "PlaneVS", "vs_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &_planeVertexShader, nullptr);
 
 	// ピクセルシェーダ
-	result = D3DCompileFromFile(L"Plane.hlsl", nullptr, nullptr, "PlanePS", "ps_5_0", D3DCOMPILE_DEBUG |
+	result = D3DCompileFromFile(L"Shader/Plane.hlsl", nullptr, nullptr, "PlanePS", "ps_5_0", D3DCOMPILE_DEBUG |
 		D3DCOMPILE_SKIP_OPTIMIZATION, 0, &_planePixelShader, nullptr);
 
 	D3D12_INPUT_ELEMENT_DESC InputLayout[] = {
